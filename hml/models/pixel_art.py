@@ -306,7 +306,9 @@ def train(
 
 
 def generate(
-        generator: tf.keras.Sequential, generator_input: Optional[str] = None, save_output: bool = False
+    generator: tf.keras.Sequential,
+    generator_input: Optional[str] = None,
+    save_output: bool = False,
 ) -> None:
     """
     Generate some pixel art
@@ -573,7 +575,9 @@ def cli_main(args: argparse.Namespace) -> int:
         return 1
     main(
         mode=args.mode,
-        model_dir=os.path.join("~/projects/pixel-art/models", args.model_name),
+        model_dir=os.path.join(
+            os.path.expanduser("~/projects/pixel-art/models"), args.model_name
+        ),
         dataset_path=args.dataset,
         continue_from_checkpoint=args.checkpoint,
         generator_input=args.generator_input,
