@@ -113,6 +113,7 @@ class PixelArtDataset:
                 image_np = image_np[:, :, :3]
             for image_crop in crops_from_full_size(image_np, shape=self.crop_shape_):
                 yield from map(normalise, permute_flips(image_crop))
+                # yield normalise(image_crop)
 
     def find_training_images(self) -> Iterable[str]:
         """
@@ -166,7 +167,8 @@ def get_args() -> argparse.Namespace:
         Argument values as argparse namespace
     """
     parser = argparse.ArgumentParser(
-        "Visualise training data", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        "Visualise training data",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "dataset",

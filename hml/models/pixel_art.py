@@ -25,8 +25,14 @@ import PIL.ImageTk
 import tensorflow as tf
 import tkinter
 
-from hml.architectures.convolutional.classifiers import pixel_art_discriminator
-from hml.architectures.convolutional.generators import pixel_art_generator
+from hml.architectures.convolutional.classifiers import (
+    pixel_art_discriminator,
+    dcgan_paper_discriminator,
+)
+from hml.architectures.convolutional.generators import (
+    pixel_art_generator,
+    dcgan_paper_generator,
+)
 from hml.data_pipelines.unsupervised.pixel_art import PixelArtDataset
 
 
@@ -55,7 +61,7 @@ global generator_output_canvas
 
 def discriminator_loss(real_output: tf.Tensor, fake_output: tf.Tensor):
     """
-    Custom loss function for the discriminator.
+    Custom loss function for the discriminator
 
     Args:
         loss_fn: Function to compute loss on an image
@@ -68,13 +74,43 @@ def discriminator_loss(real_output: tf.Tensor, fake_output: tf.Tensor):
     return total_loss
 
 
-def generator_loss(fake_output):
+def generator_loss(fake_output: tf.Tensor):
     """
     Custom loss function for the generator
 
     The generator wins if the discriminator thinks its output is real (i.e. all ones).
     """
     return cross_entropy(tf.ones_like(fake_output), fake_output)
+
+
+def discriminator_loss_wasserstein(real_output: tf.Tensor, fake_output: tf.Tensor):
+    """
+    Wasserstein loss function for the discriminator
+
+    The wasserstein loss function is intended to prevent vanishing gradients. Using a
+    wasserstein loss (making this a wasserstein GAN, or WGAN) means the discriminator's
+    output cannot be used to detect real or fake by a 0.5 threshold, so we call it a
+    critic instead.
+
+    Args:
+        loss_fn: Function to compute loss on an image
+        real_output: The discriminator's output for a real image
+        fake_output: The discriminator's output for a fake image
+    """
+    if real_output.shape[0] < fake_output.shape[0]:
+        fake_output = fake_output[real_output.shape[0], :]
+    return fake_output - real_output
+
+
+def generator_loss_wasserstein(fake_output: tf.Tensor):
+    """
+    Wasserstein loss function for the generator
+
+    The wasserstein loss function is intended to prevent vanishing gradients.
+
+    The generator wins if the discriminator thinks its output is real (i.e. all ones).
+    """
+    return -fake_output
 
 
 def generate_and_save_images(model, epoch, test_input, model_dir: str):
@@ -90,7 +126,6 @@ def generate_and_save_images(model, epoch, test_input, model_dir: str):
         generated_hsv_image = np.array(
             (predictions[i, :, :, :] * 127.5 + 127.5)
         ).astype(np.uint8)
-        # generated_rgb_image = np.array(PIL.Image.fromarray(generated_hsv_image, mode="HSV").convert("RGB"))
         generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.imshow(generated_rgb_image)
         plt.axis("off")
@@ -140,8 +175,10 @@ def train_step(
         real_output = discriminator(images, training=True)
         fake_output = discriminator(generated_images, training=True)
 
-        gen_loss = generator_loss(fake_output)
-        disc_loss = discriminator_loss(real_output, fake_output)
+        # gen_loss = generator_loss(fake_output)
+        # disc_loss = discriminator_loss(real_output, fake_output)
+        gen_loss = generator_loss_wasserstein(fake_output)
+        disc_loss = discriminator_loss_wasserstein(real_output, fake_output)
 
     gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
     gradients_of_discriminator = disc_tape.gradient(
@@ -296,13 +333,13 @@ def train(
         if (epoch + 1) % 15 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
+            # Write our last epoch down in case we want to continue
+            with open(epoch_log_file, "w", encoding="utf-8") as epoch_log:
+                epoch_log.write(str(epoch))
+
         # Reset metrics every epoch
         generator_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
-
-        # Write our last epoch down in case we want to continue
-        with open(epoch_log_file, "w", encoding="utf-8") as epoch_log:
-            epoch_log.write(str(epoch))
 
 
 def generate(
@@ -439,7 +476,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
     buffer_size: int = 1000,
-    batch_size: int = 32,
+    batch_size: int = 128,
     epochs_per_turn: int = 1,
     latent_dim: int = 100,
     num_examples_to_generate: int = 16,
@@ -469,11 +506,19 @@ def main(
     """
     start_lr = 2e-4
 
-    generator = pixel_art_generator.model()
-    generator_optimizer = tf.keras.optimizers.Adam(start_lr, beta_1=0.5)
+    # generator = pixel_art_generator.model()
+    generator = dcgan_paper_generator.model()
+    # generator_optimizer = tf.keras.optimizers.Adam(start_lr, beta_1=0.5)
+    generator_optimizer = tf.keras.optimizers.AdamW(
+        weight_decay=0.01, learning_rate=start_lr, beta_1=0.5
+    )
 
-    discriminator = pixel_art_discriminator.model()
-    discriminator_optimizer = tf.keras.optimizers.Adam(start_lr)
+    # discriminator = pixel_art_discriminator.model()
+    discriminator = dcgan_paper_discriminator.model()
+    # discriminator_optimizer = tf.keras.optimizers.Adam(start_lr)
+    discriminator_optimizer = tf.keras.optimizers.AdamW(
+        weight_decay=0.01, learning_rate=start_lr
+    )
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
@@ -511,6 +556,7 @@ def main(
         generate(
             generator=generator,
             generator_input=generator_input,
+            save_output=save_generator_output,
         )
     elif mode == "view-latent-space":
         view_latent_space(generator=generator)
@@ -557,6 +603,12 @@ def get_args() -> argparse.Namespace:
         type=str,
         default=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
     )
+    parser.add_argument(
+        "--save-output",
+        "-s",
+        action="store_true",
+        help="Save generator output to file instead of displaying",
+    )
     return parser.parse_args()
 
 
@@ -576,11 +628,12 @@ def cli_main(args: argparse.Namespace) -> int:
     main(
         mode=args.mode,
         model_dir=os.path.join(
-            os.path.expanduser("~/projects/pixel-art/models"), args.model_name
+            os.path.expanduser("/mnt/storage/ml/models"), args.model_name
         ),
         dataset_path=args.dataset,
         continue_from_checkpoint=args.checkpoint,
         generator_input=args.generator_input,
+        save_generator_output=args.save_output,
     )
     return 0
 
