@@ -101,7 +101,8 @@ class PixelArtDataset:
         for image_path in self.find_training_images():
             try:
                 with PIL.Image.open(image_path) as image:
-                    image_np = np.array(image.convert("HSV"))
+                    image_np = np.array(image)
+                    # image_np = np.array(image.convert("HSV"))
             except PIL.UnidentifiedImageError:
                 print(
                     f"Cannot open file: {image_path}, it will not be used for training"

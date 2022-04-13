@@ -31,10 +31,12 @@ import tensorflow_gan as tfgan
 from hml.architectures.convolutional.classifiers import (
     pixel_art_discriminator,
     dcgan_paper_discriminator,
+    dcgan_paper_discriminator_more_layers,
 )
 from hml.architectures.convolutional.generators import (
     pixel_art_generator,
     dcgan_paper_generator,
+    dcgan_paper_generator_more_layers,
 )
 from hml.data_pipelines.unsupervised.pixel_art import PixelArtDataset
 
@@ -86,7 +88,13 @@ def generator_loss(fake_output: tf.Tensor):
     return cross_entropy(tf.ones_like(fake_output), fake_output)
 
 
-def discriminator_loss_wasserstein(real_output: tf.Tensor, fake_output: tf.Tensor):
+def discriminator_loss_wasserstein(
+    real_output: tf.Tensor,
+    fake_output: tf.Tensor,
+    real_image,
+    fake_image: tf.Tensor,
+    discriminator: tf.keras.Sequential,
+):
     """
     Wasserstein loss function for the discriminator
 
@@ -100,9 +108,17 @@ def discriminator_loss_wasserstein(real_output: tf.Tensor, fake_output: tf.Tenso
         real_output: The discriminator's output for a real image
         fake_output: The discriminator's output for a fake image
     """
-    if real_output.shape[0] < fake_output.shape[0]:
-        fake_output = fake_output[real_output.shape[0], :]
-    return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)
+    # if real_output.shape[0] < fake_output.shape[0]:
+    #     fake_output = fake_output[real_output.shape[0], :]
+    # return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)
+    return tfgan.losses.wasserstein_discriminator_loss(
+        real_output, fake_output
+    ) + tfgan.losses.wasserstein_gradient_penalty(
+        real_image,
+        fake_image,
+        generator_inputs=None,
+        discriminator_fn=lambda image, _: discriminator(image),
+    )
 
 
 def generator_loss_wasserstein(fake_output: tf.Tensor):
@@ -113,7 +129,8 @@ def generator_loss_wasserstein(fake_output: tf.Tensor):
 
     The generator wins if the discriminator thinks its output is real (i.e. all ones).
     """
-    return -tf.reduce_mean(fake_output)
+    # return -tf.reduce_mean(fake_output)
+    return tfgan.losses.wasserstein_generator_loss(fake_output)
 
 
 def generate_and_save_images(model, epoch, test_input, model_dir: str):
@@ -181,7 +198,9 @@ def train_step(
         # gen_loss = generator_loss(fake_output)
         # disc_loss = discriminator_loss(real_output, fake_output)
         gen_loss = generator_loss_wasserstein(fake_output)
-        disc_loss = discriminator_loss_wasserstein(real_output, fake_output)
+        disc_loss = discriminator_loss_wasserstein(
+            real_output, fake_output, images, generated_images, discriminator
+        )
 
     gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
     gradients_of_discriminator = disc_tape.gradient(
@@ -507,21 +526,32 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    start_lr = 2e-4
-
+    # start_lr = 2e-4
+    INIT_LR = 1e-4
+    MAX_LR = 1e-2
+    
     # generator = pixel_art_generator.model()
-    generator = dcgan_paper_generator.model()
+    # generator = dcgan_paper_generator.model()
+    generator = dcgan_paper_generator_more_layers.model()
     # generator_optimizer = tf.keras.optimizers.Adam(start_lr, beta_1=0.5)
-    generator_optimizer = tfa.optimizers.AdamW(
-        weight_decay=3e-7, learning_rate=start_lr, beta_1=0.5
-    )
+    # generator_optimizer = tfa.optimizers.AdamW(
+    #     weight_decay=3e-7, learning_rate=start_lr, beta_1=0.5
+    # )
+    clr = tfa.optimizers.CyclicalLearningRate(initial_learning_rate=INIT_LR,
+                                              maximal_learning_rate=MAX_LR,
+                                              scale_fn=lambda x: 1/(2.**(x-1)),
+                                              step_size=2 * batch_size
+                                              )
+    generator_optimizer = tf.keras.optimizers.SGD(clr)
 
     # discriminator = pixel_art_discriminator.model()
-    discriminator = dcgan_paper_discriminator.model()
+    # discriminator = dcgan_paper_discriminator.model()
+    discriminator = dcgan_paper_discriminator_more_layers.model()
     # discriminator_optimizer = tf.keras.optimizers.Adam(start_lr)
-    discriminator_optimizer = tfa.optimizers.AdamW(
-        weight_decay=3e-7, learning_rate=start_lr
-    )
+    # discriminator_optimizer = tfa.optimizers.AdamW(
+    #     weight_decay=3e-7, learning_rate=start_lr
+    # )
+    discriminator_optimizer = tf.keras.optimizers.SGD(clr)
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
