@@ -16,6 +16,7 @@ import datetime
 import os
 import sys
 import time
+import tkinter
 
 import cv2
 import matplotlib.pyplot as plt
@@ -23,7 +24,9 @@ import numpy as np
 import PIL.Image
 import PIL.ImageTk
 import tensorflow as tf
-import tkinter
+import tensorflow_addons as tfa
+import tensorflow_gan as tfgan
+
 
 from hml.architectures.convolutional.classifiers import (
     pixel_art_discriminator,
@@ -99,7 +102,7 @@ def discriminator_loss_wasserstein(real_output: tf.Tensor, fake_output: tf.Tenso
     """
     if real_output.shape[0] < fake_output.shape[0]:
         fake_output = fake_output[real_output.shape[0], :]
-    return fake_output - real_output
+    return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)
 
 
 def generator_loss_wasserstein(fake_output: tf.Tensor):
@@ -110,7 +113,7 @@ def generator_loss_wasserstein(fake_output: tf.Tensor):
 
     The generator wins if the discriminator thinks its output is real (i.e. all ones).
     """
-    return -fake_output
+    return -tf.reduce_mean(fake_output)
 
 
 def generate_and_save_images(model, epoch, test_input, model_dir: str):
@@ -509,15 +512,15 @@ def main(
     # generator = pixel_art_generator.model()
     generator = dcgan_paper_generator.model()
     # generator_optimizer = tf.keras.optimizers.Adam(start_lr, beta_1=0.5)
-    generator_optimizer = tf.keras.optimizers.AdamW(
-        weight_decay=0.01, learning_rate=start_lr, beta_1=0.5
+    generator_optimizer = tfa.optimizers.AdamW(
+        weight_decay=3e-7, learning_rate=start_lr, beta_1=0.5
     )
 
     # discriminator = pixel_art_discriminator.model()
     discriminator = dcgan_paper_discriminator.model()
     # discriminator_optimizer = tf.keras.optimizers.Adam(start_lr)
-    discriminator_optimizer = tf.keras.optimizers.AdamW(
-        weight_decay=0.01, learning_rate=start_lr
+    discriminator_optimizer = tfa.optimizers.AdamW(
+        weight_decay=3e-7, learning_rate=start_lr
     )
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
