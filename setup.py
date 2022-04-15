@@ -9,7 +9,10 @@ setup(
     author_email="ham430@gmail.com",
     url="http://github.com/hacmorgan/hml",
     packages=[
-        "hml.architectures.convolutional.classifiers",
+        "hml.architectures.convolutional.autoencoders",
+        "hml.architectures.convolutional.discriminators",
+        "hml.architectures.convolutional.encoders",
+        "hml.architectures.convolutional.decoders",
         "hml.architectures.convolutional.generators",
         "hml.data_pipelines.unsupervised",
         "hml.models",
