@@ -19,67 +19,60 @@ def model() -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             layers.LeakyReLU(alpha=0.2),
-            # Second input size conv layer (output shape: 64, 64, 64)
-            layers.Dropout(0.3),
-            layers.BatchNormalization(),
-            layers.Conv2D(
-                64, kernel_size=5, strides=2, padding="same", kernel_initializer=init
-            ),
-            layers.LeakyReLU(alpha=0.2),
-            # Half input size conv layer (output shape: 32, 32, 128)
-            layers.Dropout(0.3),
-            layers.BatchNormalization(),
-            layers.Conv2D(
-                128, kernel_size=5, strides=1, padding="same", kernel_initializer=init
-            ),
-            layers.LeakyReLU(alpha=0.2),
-            # Second Half input size conv layer (output shape: 32, 32, 128)
+            # Second input size conv layer (output shape: 32, 32, 128)
             layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
                 128, kernel_size=5, strides=2, padding="same", kernel_initializer=init
             ),
             layers.LeakyReLU(alpha=0.2),
-            # Quarter input size conv layer (output shape: 16, 16, 256)
+            # Plain conv (output shape: 32, 32, 128)
             layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
-                256, kernel_size=5, strides=1, padding="same", kernel_initializer=init
+                128, kernel_size=5, strides=1, padding="same", kernel_initializer=init
             ),
             layers.LeakyReLU(alpha=0.2),
-            # Quarter input size conv layer (output shape: 16, 16, 256)
+            # Second Half input size conv layer (output shape: 32, 32, 256)
             layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
                 256, kernel_size=5, strides=2, padding="same", kernel_initializer=init
             ),
             layers.LeakyReLU(alpha=0.2),
-            # Eighth input size conv layer (output shape: 8, 8, 512)
+            # Plain conv layer (output shape: 32, 32, 256)
             layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
-                512, kernel_size=5, strides=1, padding="same", kernel_initializer=init
+                256, kernel_size=5, strides=1, padding="same", kernel_initializer=init
             ),
-            # Eighth input size conv layer (output shape: 8, 8, 512)
+            layers.LeakyReLU(alpha=0.2),
+            # Quarter input size conv layer (output shape: 16, 16, 512)
             layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
                 512, kernel_size=5, strides=2, padding="same", kernel_initializer=init
             ),
             layers.LeakyReLU(alpha=0.2),
-            # Sixteenth input size conv layer (output shape: 4, 4, 1024)
+            # Plain conv (output shape: 16, 16, 512)
             layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
-                1024, kernel_size=5, strides=1, padding="same", kernel_initializer=init
+                512, kernel_size=5, strides=1, padding="same", kernel_initializer=init
             ),
-            # Sixteenth input size conv layer (output shape: 4, 4, 1024)
+            # Eighth input size conv layer (output shape: 8, 8, 1024)
             layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
                 1024, kernel_size=5, strides=2, padding="same", kernel_initializer=init
             ),
             layers.LeakyReLU(alpha=0.2),
+            # Plain conv (output shape: 4, 4, 1024)
+            layers.Dropout(0.3),
+            layers.BatchNormalization(),
+            layers.Conv2D(
+                1024, kernel_size=5, strides=1, padding="same", kernel_initializer=init
+            ),
             # Output neuron
             layers.Dropout(0.3),
             layers.BatchNormalization(),

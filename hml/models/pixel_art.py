@@ -31,6 +31,7 @@ import tensorflow_gan as tfgan
 from hml.architectures.convolutional.classifiers import (
     pixel_art_discriminator,
     dcgan_paper_discriminator,
+    dcgan_paper_discriminator_first_conv_unstrided,
     dcgan_paper_discriminator_more_layers,
 )
 from hml.architectures.convolutional.generators import (
@@ -88,12 +89,40 @@ def generator_loss(fake_output: tf.Tensor):
     return cross_entropy(tf.ones_like(fake_output), fake_output)
 
 
+def gradient_penalty_wasserstein(
+    real_data: tf.Tensor,
+    fake_data: tf.Tensor,
+    discriminator: tf.keras.Sequential,
+):
+    """
+    Gradent penalty term for wasserstein discriminator (critic)
+    """
+    batch_size = real_data.shape[0]
+    if fake_data.shape[0] != batch_size:
+        fake_data = fake_data[batch_size, ...]
+
+    # Epsilon must be broadcastable to shape of real_data and fake_data
+    epsilon = tf.random.uniform([batch_size, 1, 1, 1], minval=0.0, maxval=1.0)
+    interpolated_data = real_data + epsilon * (fake_data - real_data)
+
+    # Compute gradient
+    d_interpolated = discriminator(interpolated_data)
+
+    # L2 norm is calculated on each sample
+    grad_d_interpolated = tf.gradients(d_interpolated, [interpolated_data])[0]
+    slopes = tf.sqrt(
+        1e-8 + tf.reduce_sum(tf.square(grad_d_interpolated), axis=[1, 2, 3])
+    )
+    return tf.reduce_mean((slopes - 1.0) ** 2)
+
+
 def discriminator_loss_wasserstein(
     real_output: tf.Tensor,
     fake_output: tf.Tensor,
-    real_image,
+    real_image: tf.Tensor,
     fake_image: tf.Tensor,
     discriminator: tf.keras.Sequential,
+    regularisation_lambda: float = 1e1,
 ):
     """
     Wasserstein loss function for the discriminator
@@ -108,16 +137,13 @@ def discriminator_loss_wasserstein(
         real_output: The discriminator's output for a real image
         fake_output: The discriminator's output for a fake image
     """
-    # if real_output.shape[0] < fake_output.shape[0]:
-    #     fake_output = fake_output[real_output.shape[0], :]
-    # return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)
-    return tfgan.losses.wasserstein_discriminator_loss(
-        real_output, fake_output
-    ) + tfgan.losses.wasserstein_gradient_penalty(
-        real_image,
-        fake_image,
-        generator_inputs=None,
-        discriminator_fn=lambda image, _: discriminator(image),
+    if real_output.shape[0] < fake_output.shape[0]:
+        fake_output = fake_output[real_output.shape[0], :]
+    return (
+        tf.reduce_mean(fake_output)
+        - tf.reduce_mean(real_output)
+        # + regularisation_lambda
+        # * gradient_penalty_wasserstein(real_image, fake_image, discriminator)
     )
 
 
@@ -129,8 +155,8 @@ def generator_loss_wasserstein(fake_output: tf.Tensor):
 
     The generator wins if the discriminator thinks its output is real (i.e. all ones).
     """
-    # return -tf.reduce_mean(fake_output)
-    return tfgan.losses.wasserstein_generator_loss(fake_output)
+    return -tf.reduce_mean(fake_output)
+    # return tfgan.losses.wasserstein_generator_loss(fake_output)
 
 
 def generate_and_save_images(model, epoch, test_input, model_dir: str):
@@ -139,21 +165,20 @@ def generate_and_save_images(model, epoch, test_input, model_dir: str):
     """
     predictions = model(test_input, training=False)
 
-    fig = plt.figure(figsize=(4, 4))
+    # Clear the figure
+    plt.cla()
 
     for i in range(predictions.shape[0]):
         plt.subplot(4, 4, i + 1)
-        generated_hsv_image = np.array(
+        generated_rgb_image = np.array(
             (predictions[i, :, :, :] * 127.5 + 127.5)
         ).astype(np.uint8)
-        generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
+        # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.imshow(generated_rgb_image)
         plt.axis("off")
 
     os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
     plt.savefig(os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png"), dpi=250)
-
-    del fig
 
 
 @tf.function
@@ -195,12 +220,12 @@ def train_step(
         real_output = discriminator(images, training=True)
         fake_output = discriminator(generated_images, training=True)
 
-        # gen_loss = generator_loss(fake_output)
-        # disc_loss = discriminator_loss(real_output, fake_output)
-        gen_loss = generator_loss_wasserstein(fake_output)
-        disc_loss = discriminator_loss_wasserstein(
-            real_output, fake_output, images, generated_images, discriminator
-        )
+        gen_loss = generator_loss(fake_output)
+        disc_loss = discriminator_loss(real_output, fake_output)
+        # gen_loss = generator_loss_wasserstein(fake_output)
+        # disc_loss = discriminator_loss_wasserstein(
+            # real_output, fake_output, images, generated_images, discriminator
+        # )
 
     gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
     gradients_of_discriminator = disc_tape.gradient(
@@ -304,21 +329,11 @@ def train(
     should_train_generator = True
     should_train_discriminator = True
 
+    # track steps for tensorboard
+    total_steps = 0
+
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
-
-        # Alternate who can train periodically
-        # After the initial period of training both networks, we alternate who gets to train
-        if epoch != epoch_start and epoch % epochs_per_turn == 0:
-            if should_train_discriminator == should_train_generator:
-                should_train_generator = False
-                should_train_discriminator = True
-            else:
-                should_train_generator = not should_train_generator
-                should_train_discriminator = not should_train_discriminator
-            print(
-                f"Switching who trains: {should_train_generator=}, {should_train_discriminator=}"
-            )
 
         for step, image_batch in enumerate(train_images):
             # Perform training step
@@ -335,6 +350,15 @@ def train(
                 batch_size=batch_size,
                 noise_size=latent_dim,
             )
+
+            with generator_summary_writer.as_default(), discriminator_summary_writer.as_default():
+                tf.summary.scalar(
+                    "generator_loss", generator_loss_metric.result(), step=total_steps
+                )
+                tf.summary.scalar(
+                    "discriminator_loss", discriminator_loss_metric.result(), step=total_steps
+                )
+                total_steps += 1
 
             if step % 5 == 0:
                 print(
@@ -358,6 +382,21 @@ def train(
             # Write our last epoch down in case we want to continue
             with open(epoch_log_file, "w", encoding="utf-8") as epoch_log:
                 epoch_log.write(str(epoch))
+
+        # Alternate who can train periodically
+        # After the initial period of training both networks, we alternate who gets to train
+        if epoch % epochs_per_turn == 0:
+            if should_train_discriminator == should_train_generator:
+                should_train_generator = False
+                should_train_discriminator = True
+            elif (should_train_discriminator and discriminator_loss_metric.result() > generator_loss_metric.result()) or (should_train_generator and generator_loss_metric.result() > discriminator_loss_metric.result()):
+                print("Not switching who trains, insufficient progress made")
+            else:
+                should_train_generator = not should_train_generator
+                should_train_discriminator = not should_train_discriminator
+            print(
+                f"Switching who trains: {should_train_generator=}, {should_train_discriminator=}"
+            )
 
         # Reset metrics every epoch
         generator_loss_metric.reset_states()
@@ -386,10 +425,11 @@ def generate(
         latent_input = tf.random.normal([1, 100])
     i = 0
     while True:
-        generated_hsv_image = np.array(
+        generated_rgb_image = np.array(
             (generator(latent_input, training=False)[0, :, :, :] * 127.5 + 127.5)
         ).astype(np.uint8)
-        generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
+        # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
+        plt.cla()
         plt.imshow(generated_rgb_image)
         plt.axis("off")
         if save_output:
@@ -498,7 +538,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
     buffer_size: int = 1000,
-    batch_size: int = 128,
+    batch_size: int = 64,
     epochs_per_turn: int = 1,
     latent_dim: int = 100,
     num_examples_to_generate: int = 16,
@@ -526,32 +566,43 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    # start_lr = 2e-4
-    INIT_LR = 1e-4
-    MAX_LR = 1e-2
-    
+    start_lr = 2e-4
+    INIT_LR = 1e-5
+    MAX_LR = 2e-4
+    STEPS_PER_EPOCH = 27520 / batch_size
+
     # generator = pixel_art_generator.model()
     # generator = dcgan_paper_generator.model()
     generator = dcgan_paper_generator_more_layers.model()
-    # generator_optimizer = tf.keras.optimizers.Adam(start_lr, beta_1=0.5)
+    generator_optimizer = tf.keras.optimizers.Adam(start_lr, beta_1=0.5)
     # generator_optimizer = tfa.optimizers.AdamW(
     #     weight_decay=3e-7, learning_rate=start_lr, beta_1=0.5
     # )
-    clr = tfa.optimizers.CyclicalLearningRate(initial_learning_rate=INIT_LR,
-                                              maximal_learning_rate=MAX_LR,
-                                              scale_fn=lambda x: 1/(2.**(x-1)),
-                                              step_size=2 * batch_size
-                                              )
-    generator_optimizer = tf.keras.optimizers.SGD(clr)
+    # generator_optimizer = tf.keras.optimizers.SGD(clr)
 
     # discriminator = pixel_art_discriminator.model()
     # discriminator = dcgan_paper_discriminator.model()
+    # discriminator = dcgan_paper_discriminator_first_conv_unstrided.model()
     discriminator = dcgan_paper_discriminator_more_layers.model()
-    # discriminator_optimizer = tf.keras.optimizers.Adam(start_lr)
+    discriminator_optimizer = tf.keras.optimizers.Adam(start_lr)
     # discriminator_optimizer = tfa.optimizers.AdamW(
-    #     weight_decay=3e-7, learning_rate=start_lr
+    #     # weight_decay=3e-7,
+    #     weight_decay=1e-4,
+    #     learning_rate=start_lr
     # )
-    discriminator_optimizer = tf.keras.optimizers.SGD(clr)
+    # # clr = tfa.optimizers.CyclicalLearningRate(
+    #     initial_learning_rate=INIT_LR,
+    #     maximal_learning_rate=MAX_LR,
+    #     scale_fn=lambda x: x * (1-1e-3),  # very slowly decaying triangle
+    #     # scale_fn=lambda x: 1 / (2.0 ** (x - 1)),
+    #     step_size=7 * STEPS_PER_EPOCH,  # odd number to switch who gets the highest LR
+    # )
+    # discriminator_optimizer = tf.keras.optimizers.SGD(clr)
+    # piecewise_decay_lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
+    #     boundaries=[100 * STEPS_PER_EPOCH, 500 * STEPS_PER_EPOCH],
+    #     values=[2e-4, 1e-4, 5e-5],
+    # )
+    # discriminator_optimizer = tf.keras.optimizers.SGD(piecewise_decay_lr)
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")

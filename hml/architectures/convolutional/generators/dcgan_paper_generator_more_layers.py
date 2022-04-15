@@ -18,6 +18,17 @@ def model() -> tf.keras.Sequential:
                 4 * 4 * 1024, use_bias=False, activation="relu", kernel_initializer=init
             ),
             layers.Reshape((4, 4, 1024)),
+            # 0.a. plain conv, (4, 4, 1024)
+            layers.BatchNormalization(),
+            layers.Conv2DTranspose(
+                512,
+                kernel_size=5,
+                strides=1,
+                padding="same",
+                use_bias=False,
+                activation="relu",
+                kernel_initializer=init,
+            ),
             # 1.a. upscale by fractionally strided conv, (8, 8, 512)
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
