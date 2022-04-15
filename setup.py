@@ -19,6 +19,7 @@ setup(
     ],
     scripts=[
         "hml/models/pixel_art.py",
+        "hml/models/pixel_art_ae.py",
     ],
     install_requires=[
         "opencv-python",

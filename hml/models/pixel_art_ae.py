@@ -16,7 +16,7 @@ import datetime
 import os
 import sys
 import time
-import tkinter
+# import tkinter
 
 import cv2
 import matplotlib.pyplot as plt
@@ -226,8 +226,8 @@ def train(
 
 
 def generate(
-    generator: tf.keras.Sequential,
-    generator_input: Optional[str] = None,
+    decoder: tf.keras.Sequential,
+    decoder_input: Optional[str] = None,
     save_output: bool = False,
 ) -> None:
     """
@@ -239,8 +239,8 @@ def generate(
                          used if not given.
         save_output: Save images instead of displaying
     """
-    if generator_input is not None:
-        input_raw = tf.io.read_file(generator_input)
+    if decoder_input is not None:
+        input_raw = tf.io.read_file(decoder_input)
         input_decoded = tf.image.decode_image(input_raw)
         latent_input = tf.reshape(input_decoded, [1, 100])
     else:
@@ -248,10 +248,10 @@ def generate(
     i = 0
     while True:
         generated_rgb_image = np.array(
-            (generator(latent_input, training=False)[0, :, :, :] * 127.5 + 127.5)
+            (decoder(latent_input, training=False)[0, :, :, :] * 127.5 + 127.5)
         ).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
-        plt.cla()
+        plt.close("all")
         plt.imshow(generated_rgb_image)
         plt.axis("off")
         if save_output:
