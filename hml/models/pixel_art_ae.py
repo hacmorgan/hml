@@ -18,11 +18,14 @@ import sys
 import time
 # import tkinter
 
+import matplotlib
+matplotlib.use("GTK3Agg")
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
-import PIL.ImageTk
+# import PIL.ImageTk
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow_gan as tfgan
@@ -365,7 +368,7 @@ def main(
     latent_dim: int = 100,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
-    generator_input: Optional[str] = None,
+    decoder_input: Optional[str] = None,
     save_generator_output: bool = False,
 ) -> None:
     """
@@ -384,7 +387,7 @@ def main(
         num_examples_to_generate: How many examples to generate on each epoch
         continue_from_checkpoint: Restore weights from checkpoint file if given, start
                                   from scratch otherwise.
-        generator_input: Path to a 10x10 grayscale image, to be used as input to the
+        decoder_input: Path to a 10x10 grayscale image, to be used as input to the
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
@@ -423,12 +426,12 @@ def main(
         )
     elif mode == "generate":
         generate(
-            generator=generator,
-            generator_input=generator_input,
+            decoder=autoencoder.decoder_,
+            decoder_input=decoder_input,
             save_output=save_generator_output,
         )
     elif mode == "view-latent-space":
-        view_latent_space(generator=generator)
+        view_latent_space(generator=autoencoder.decoder_)
 
 
 def get_args() -> argparse.Namespace:
@@ -501,7 +504,7 @@ def cli_main(args: argparse.Namespace) -> int:
         ),
         dataset_path=args.dataset,
         continue_from_checkpoint=args.checkpoint,
-        generator_input=args.generator_input,
+        decoder_input=args.generator_input,
         save_generator_output=args.save_output,
     )
     return 0
