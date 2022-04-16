@@ -33,6 +33,7 @@ import tensorflow_gan as tfgan
 
 from hml.architectures.convolutional.autoencoders.pixel_art_ae import PixelArtAE
 from hml.data_pipelines.unsupervised.pixel_art import PixelArtDataset
+from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
 
 
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
@@ -71,7 +72,7 @@ def generate_and_save_images(
     for i in range(predictions.shape[0]):
         plt.subplot(4, 4, i + 1)
         generated_rgb_image = np.array(
-            (predictions[i, :, :, :] * 127.5 + 127.5)
+            (predictions[i, :, :, :] * 255)
         ).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.imshow(generated_rgb_image)
@@ -150,7 +151,7 @@ def train(
     """
     train_images = (
         tf.data.Dataset.from_generator(
-            PixelArtDataset(dataset_path=dataset_path, crop_shape=train_crop_shape),
+            PixelArtSigmoidDataset(dataset_path=dataset_path, crop_shape=train_crop_shape),
             output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
         )
         .shuffle(buffer_size)
@@ -251,7 +252,7 @@ def generate(
     i = 0
     while True:
         generated_rgb_image = np.array(
-            (decoder(latent_input, training=False)[0, :, :, :] * 127.5 + 127.5)
+            (decoder(latent_input, training=False)[0, :, :, :] * 255.0)
         ).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.close("all")
@@ -391,7 +392,7 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    start_lr = 2e-4
+    start_lr = 1e-4
 
     autoencoder = PixelArtAE(latent_dim=latent_dim)
     optimizer = tf.keras.optimizers.Adam(start_lr)
