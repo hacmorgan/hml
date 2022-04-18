@@ -6,7 +6,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
     """
     VAE decoder
     """
-    latent_inputs = layers.Input(shape=(latent_dim,))
+    latent_inputs = tf.keras.Input(shape=(latent_dim,))
     x = layers.Dense(4 * 4 * 1024, activation="relu")(latent_inputs)
     x = layers.Reshape((4, 4, 1024))(x)
     x = layers.Conv2DTranspose(
