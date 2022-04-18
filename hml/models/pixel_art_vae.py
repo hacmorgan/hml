@@ -207,7 +207,7 @@ def train_step(
         z_mean, z_log_var, z = autoencoder.encoder_(images)
         reconstruction = autoencoder.decoder_(z)
         reconstruction_loss = tf.reduce_mean(
-            tf.reduce_sum(bce(images, reconstruction), axis=(1, 2, 3))
+            tf.reduce_sum(bce(images, reconstruction), axis=(1, 2))
         )
         kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
         kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
