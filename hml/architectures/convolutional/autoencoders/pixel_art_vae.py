@@ -2,10 +2,10 @@ import tensorflow as tf
 from tensorflow.keras import layers
 
 from hml.architectures.convolutional.decoders import (
-    pixel_art_vae_decoder,
+    pixel_art_vae_decoder, pixel_art_vae_decoder_sequential
 )
 from hml.architectures.convolutional.encoders import (
-    pixel_art_vae_encoder,
+    pixel_art_vae_encoder, pixel_art_vae_encoder_sequential
 )
 
 
@@ -20,8 +20,8 @@ class PixelArtVAE(tf.keras.models.Model):
         """
         super().__init__()
         self.latent_dim_ = latent_dim
-        self.encoder_ = pixel_art_vae_encoder.model(latent_dim=self.latent_dim_)
-        self.decoder_ = pixel_art_vae_decoder.model(latent_dim=self.latent_dim_)
+        self.encoder_ = pixel_art_vae_encoder_sequential.model(latent_dim=self.latent_dim_)
+        self.decoder_ = pixel_art_vae_decoder_sequential.model(latent_dim=self.latent_dim_)
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
@@ -32,6 +32,27 @@ class PixelArtVAE(tf.keras.models.Model):
         """
         Run the model (for visualisation)
         """
-        z_mean, z_log_var, z = self.encoder_(input_image, training=training)
-        decoded = self.decoder_.predict(z)
-        return decoded
+        mean, logvar = self.encode(input_image)
+        z = self.reparameterize(mean, logvar)
+        return self.sample(z)
+
+    @tf.function
+    def sample(self, eps=None):
+        if eps is None:
+            eps = tf.random.normal(shape=(100, self.latent_dim_))
+        return self.decode(eps, apply_sigmoid=True)
+
+    def encode(self, x):
+        mean, logvar = tf.split(self.encoder_(x), num_or_size_splits=2, axis=1)
+        return mean, logvar
+
+    def reparameterize(self, mean, logvar):
+        eps = tf.random.normal(shape=mean.shape)
+        return eps * tf.exp(logvar * .5) + mean
+
+    def decode(self, z, apply_sigmoid=False):
+        logits = self.decoder_(z)
+        if apply_sigmoid:
+            probs = tf.sigmoid(logits)
+            return probs
+        return logits

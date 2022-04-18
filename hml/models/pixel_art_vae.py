@@ -148,12 +148,12 @@ def reproduce_save_image(
 
 
 def generate_and_save_images(
-    decoder: tf.keras.Sequential, epoch: int, test_input: tf.Tensor, progress_dir: str
+    autoencoder: tf.keras.Sequential, epoch: int, test_input: tf.Tensor, progress_dir: str
 ) -> None:
     """
     Generate and save images
     """
-    predictions = decoder.predict(test_input)
+    predictions = autoencoder.sample(test_input)
     output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
     # threading.Thread(
     #     target=generate_save_image, args=(predictions, output_path)
@@ -171,7 +171,6 @@ def show_reproduction_quality(
     Generate and save images
     """
     reproductions = autoencoder.call(test_images, training=False)
-    print(f"{reproductions.shape=}")
     print(f"{np.mean(reproductions)=}, {np.std(reproductions)=}")
     output_path = os.path.join(
         reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
@@ -182,14 +181,30 @@ def show_reproduction_quality(
     reproduce_save_image(test_images, reproductions, output_path)
 
 
+def log_normal_pdf(sample, mean, logvar, raxis=1):
+    log2pi = tf.math.log(2. * np.pi)
+    return tf.reduce_sum(
+        -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
+        axis=raxis)
+
+
+def compute_loss(model, x):
+    mean, logvar = model.encode(x)
+    z = model.reparameterize(mean, logvar)
+    x_logit = model.decode(z)
+    cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
+    logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
+    logpz = log_normal_pdf(z, 0., 0.)
+    logqz_x = log_normal_pdf(z, mean, logvar)
+    return -tf.reduce_mean(logpx_z + logpz - logqz_x)
+
+
 @tf.function
 def train_step(
     images,
     autoencoder: tf.keras.models.Model,
     optimizer: "Optimizer",
     loss_metric: tf.keras.metrics,
-    kl_loss_metric: tf.keras.metrics,
-    reconstruction_loss_metric: tf.keras.metrics,
     latent_dim: int,
 ) -> None:
     """
@@ -205,22 +220,28 @@ def train_step(
         batch_size: Number of training examples in a batch
         latent_dim: Size of latent space
     """
+    # with tf.GradientTape() as tape:
+    #     z_mean, z_log_var, z = autoencoder.encoder_(images)
+    #     reconstruction = autoencoder.decoder_(z)
+    #     # reconstruction_loss = tf.reduce_mean(
+    #     #     tf.reduce_sum(bce(images, reconstruction))
+    #     #     # tf.reduce_sum(bce(images, reconstruction), axis=(1, 2))
+    #     # )
+    #     reconstruction_loss = mse(images, reconstruction)
+    #     kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
+    #     kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
+    #     total_loss = reconstruction_loss  # + 1e-4 * kl_loss
+    # gradients = tape.gradient(total_loss, autoencoder.trainable_variables)
+    # optimizer.apply_gradients(zip(gradients, autoencoder.trainable_variables))
+    # loss_metric(total_loss)
+    # kl_loss_metric(kl_loss)
+    # reconstruction_loss_metric(reconstruction_loss)
     with tf.GradientTape() as tape:
-        z_mean, z_log_var, z = autoencoder.encoder_(images)
-        reconstruction = autoencoder.decoder_(z)
-        # reconstruction_loss = tf.reduce_mean(
-        #     tf.reduce_sum(bce(images, reconstruction))
-        #     # tf.reduce_sum(bce(images, reconstruction), axis=(1, 2))
-        # )
-        reconstruction_loss = mse(images, reconstruction)
-        kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
-        kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-        total_loss = reconstruction_loss  # + 1e-4 * kl_loss
-    gradients = tape.gradient(total_loss, autoencoder.trainable_variables)
+        loss = compute_loss(autoencoder, images)
+    loss_metric(loss)
+    gradients = tape.gradient(loss, autoencoder.trainable_variables)
     optimizer.apply_gradients(zip(gradients, autoencoder.trainable_variables))
-    loss_metric(total_loss)
-    kl_loss_metric(kl_loss)
-    reconstruction_loss_metric(reconstruction_loss)
+
 
 
 def compute_losses(
@@ -363,8 +384,6 @@ def train(
                 autoencoder=autoencoder,
                 optimizer=optimizer,
                 loss_metric=loss_metric,
-                kl_loss_metric=kl_loss_metric,
-                reconstruction_loss_metric=reconstruction_loss_metric,
                 latent_dim=latent_dim,
             )
 
@@ -379,7 +398,7 @@ def train(
                 )
 
         # Produce demo output every epoch the generator trains
-        generate_and_save_images(autoencoder.decoder_, epoch + 1, seed, progress_dir)
+        generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
 
         # Show some examples of how the model reconstructs its inputs.
         show_reproduction_quality(
@@ -395,8 +414,8 @@ def train(
         )
 
         # Get sample of encoder output
-        z_mean, z_log_var, encoder_output_train = autoencoder.encoder_(train_test_image_batch)
-        z_mean, z_log_var, encoder_output_val = autoencoder.encoder_(val_test_image_batch)
+        # z_mean, z_log_var, encoder_output_train = autoencoder.encoder_(train_test_image_batch)
+        # z_mean, z_log_var, encoder_output_val = autoencoder.encoder_(val_test_image_batch)
 
         with summary_writer.as_default():
             tf.summary.scalar(
@@ -405,33 +424,33 @@ def train(
                 optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
-            tf.summary.histogram(
-                "encoder output train", encoder_output_train, step=epoch
-            )
-            tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
-            tf.summary.scalar(
-                "encoder output train: mean",
-                np.mean(encoder_output_train.numpy()),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "encoder output train: stddev",
-                np.std(encoder_output_train.numpy()),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "encoder output val: mean",
-                np.mean(encoder_output_val.numpy()),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "encoder output val: stddev",
-                np.std(encoder_output_val.numpy()),
-                step=epoch,
-            )
+            # tf.summary.histogram(
+            #     "encoder output train", encoder_output_train, step=epoch
+            # )
+            # tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
+            # tf.summary.scalar(
+            #     "encoder output train: mean",
+            #     np.mean(encoder_output_train.numpy()),
+            #     step=epoch,
+            # )
+            # tf.summary.scalar(
+            #     "encoder output train: stddev",
+            #     np.std(encoder_output_train.numpy()),
+            #     step=epoch,
+            # )
+            # tf.summary.scalar(
+            #     "encoder output val: mean",
+            #     np.mean(encoder_output_val.numpy()),
+            #     step=epoch,
+            # )
+            # tf.summary.scalar(
+            #     "encoder output val: stddev",
+            #     np.std(encoder_output_val.numpy()),
+            #     step=epoch,
+            # )
             tf.summary.scalar("loss metric", loss_metric.result(), step=epoch)
-            tf.summary.scalar("kl loss metric", kl_loss_metric.result(), step=epoch)
-            tf.summary.scalar("reconstruction loss metric", reconstruction_loss_metric.result(), step=epoch)
+            # tf.summary.scalar("kl loss metric", kl_loss_metric.result(), step=epoch)
+            # tf.summary.scalar("reconstruction loss metric", reconstruction_loss_metric.result(), step=epoch)
             tf.summary.scalar("train loss", train_loss, step=epoch)
             tf.summary.scalar("validation loss", val_loss, step=epoch)
             # tf.summary.image("dd", step=epoch)
