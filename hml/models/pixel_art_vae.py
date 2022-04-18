@@ -84,7 +84,6 @@ def modified_files_in_git_repo() -> bool:
     result = subprocess.run(
         'cd "$HOME/src/hml" && git status --porcelain=v1 | grep -v -e "^??" -e "^M"',
         shell=True,
-        check=True,
         stdout=subprocess.PIPE,
     )
     output = result.stdout.decode("utf-8").strip()
