@@ -113,8 +113,8 @@ class PixelArtSigmoidDataset:
             if image_np.shape[2] > 3:
                 image_np = image_np[:, :, :3]
             for image_crop in crops_from_full_size(image_np, shape=self.crop_shape_):
-                # yield from map(normalise, permute_flips(image_crop))
-                yield normalise(image_crop)
+                yield from map(normalise, permute_flips(image_crop))
+                # yield normalise(image_crop)
 
     def find_training_images(self) -> Iterable[str]:
         """
