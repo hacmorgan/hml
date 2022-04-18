@@ -396,7 +396,7 @@ def train(
         with summary_writer.as_default():
             tf.summary.scalar(
                 "learning rate",
-                optimizer.learning_rate(),
+                optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
             tf.summary.histogram(
@@ -621,11 +621,11 @@ def main(
     )
 
     autoencoder = PixelArtVAE(latent_dim=latent_dim)
-    optimizer = tf.keras.optimizers.Adam(clr)
-    # step = tf.Variable(0, trainable=False)
-    # optimizer = tfa.optimizers.AdamW(
-    #     weight_decay=lambda: 1e-4 , learning_rate=clr
-    # )
+    # optimizer = tf.keras.optimizers.Adam(clr)
+    step = tf.Variable(0, trainable=False)
+    optimizer = tfa.optimizers.AdamW(
+        weight_decay=lambda: 1e-4 * clr(step), learning_rate=clr
+    )
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
