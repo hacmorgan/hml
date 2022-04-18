@@ -30,8 +30,8 @@ class PixelArtVAE(tf.keras.models.Model):
 
     def call(self, input_image: tf.Tensor, training: bool = True) -> tf.Tensor:
         """
-        Run the model (for training)
+        Run the model (for visualisation)
         """
         z_mean, z_log_var, z = self.encoder_(input_image, training=training)
-        decoded = self.decoder_(z, training=training)
+        decoded = self.decoder_.predict(z)
         return decoded

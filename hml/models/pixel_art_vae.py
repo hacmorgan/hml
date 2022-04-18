@@ -153,7 +153,7 @@ def generate_and_save_images(
     """
     Generate and save images
     """
-    predictions = decoder(test_input, training=False)
+    predictions = decoder.predict(test_input)
     output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
     # threading.Thread(
     #     target=generate_save_image, args=(predictions, output_path)
@@ -206,11 +206,11 @@ def train_step(
     with tf.GradientTape() as tape:
         z_mean, z_log_var, z = autoencoder.encoder_(images)
         reconstruction = autoencoder.decoder_(z)
-        # reconstruction_loss = tf.reduce_mean(
-        #     tf.reduce_sum(bce(images, reconstruction))
-        #     # tf.reduce_sum(bce(images, reconstruction), axis=(1, 2))
-        # )
-        reconstruction_loss = mse(images, reconstruction)
+        reconstruction_loss = tf.reduce_mean(
+            tf.reduce_sum(bce(images, reconstruction))
+            # tf.reduce_sum(bce(images, reconstruction), axis=(1, 2))
+        )
+        # reconstruction_loss = mse(images, reconstruction)
         kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
         kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
         total_loss = reconstruction_loss + kl_loss
