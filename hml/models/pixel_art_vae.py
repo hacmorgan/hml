@@ -278,9 +278,15 @@ def train(
         continue_from_checkpoint: Restore weights from checkpoint file if given, start
                                   from scratch otherwise.
     """
+    # Die if there are uncommitted changes in the repo
     if modified_files_in_git_repo():
         return
+
+    # Write commit hash to model directory
+    os.makedirs(model_dir, exist_ok=True)
     write_commit_hash_to_model_dir(model_dir)
+
+    # Instantiate train and val datasets
     train_images = (
         tf.data.Dataset.from_generator(
             PixelArtSigmoidDataset(
