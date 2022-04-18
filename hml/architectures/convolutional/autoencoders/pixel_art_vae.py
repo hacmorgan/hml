@@ -14,7 +14,7 @@ class PixelArtVAE(tf.keras.models.Model):
     Autoencoder with architecture based on DCGAN paper
     """
 
-    def __init__(self, latent_dim: int = 10) -> "PixelArtAE":
+    def __init__(self, latent_dim: int = 10) -> "PixelArtVAE":
         """
         Construnt the autoencoder
         """

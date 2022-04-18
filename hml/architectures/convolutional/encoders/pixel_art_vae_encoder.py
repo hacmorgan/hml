@@ -37,6 +37,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
         padding="same",
         activation="sigmoid",
     )(x)
+    x = layers.Flatten()(x)
     x = layers.Dense(100, activation="relu")(x)
     z_mean = layers.Dense(latent_dim, name="z_mean")(x)
     z_log_var = layers.Dense(latent_dim, name="z_log_var")(x)
