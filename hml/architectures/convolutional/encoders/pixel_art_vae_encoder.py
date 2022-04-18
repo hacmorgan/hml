@@ -35,7 +35,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
         kernel_size=5,
         strides=2,
         padding="same",
-        activation="sigmoid",
+        activation="relu",
     )(x)
     x = layers.Flatten()(x)
     x = layers.Dense(100, activation="relu")(x)

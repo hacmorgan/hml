@@ -171,6 +171,8 @@ def show_reproduction_quality(
     Generate and save images
     """
     reproductions = autoencoder.call(test_images, training=False)
+    print(f"{reproductions.shape=}")
+    print(f"{np.mean(reproductions)=}, {np.std(reproductions)=}")
     output_path = os.path.join(
         reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
     )
@@ -206,16 +208,16 @@ def train_step(
     with tf.GradientTape() as tape:
         z_mean, z_log_var, z = autoencoder.encoder_(images)
         reconstruction = autoencoder.decoder_(z)
-        reconstruction_loss = tf.reduce_mean(
-            tf.reduce_sum(bce(images, reconstruction))
-            # tf.reduce_sum(bce(images, reconstruction), axis=(1, 2))
-        )
-        # reconstruction_loss = mse(images, reconstruction)
+        # reconstruction_loss = tf.reduce_mean(
+        #     tf.reduce_sum(bce(images, reconstruction))
+        #     # tf.reduce_sum(bce(images, reconstruction), axis=(1, 2))
+        # )
+        reconstruction_loss = mse(images, reconstruction)
         kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
         kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-        total_loss = reconstruction_loss + kl_loss
-    gradients = tape.gradient(total_loss, autoencoder.trainable_weights)
-    optimizer.apply_gradients(zip(gradients, autoencoder.trainable_weights))
+        total_loss = reconstruction_loss  # + 1e-4 * kl_loss
+    gradients = tape.gradient(total_loss, autoencoder.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, autoencoder.trainable_variables))
     loss_metric(total_loss)
     kl_loss_metric(kl_loss)
     reconstruction_loss_metric(reconstruction_loss)
@@ -234,8 +236,8 @@ def compute_losses(
     """
     reproduced_train_images = autoencoder.call(train_images, training=False)
     reproduced_val_images = autoencoder.call(val_images, training=False)
-    train_loss = bce(train_images, reproduced_train_images)
-    val_loss = bce(val_images, reproduced_val_images)
+    train_loss = mse(train_images, reproduced_train_images)
+    val_loss = mse(val_images, reproduced_val_images)
     return train_loss, val_loss
 
 
@@ -255,6 +257,7 @@ def train(
     latent_dim: int = 10,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
+    debug: bool = False,
 ) -> None:
     """
     Train the model.
@@ -279,13 +282,14 @@ def train(
         continue_from_checkpoint: Restore weights from checkpoint file if given, start
                                   from scratch otherwise.
     """
-    # Die if there are uncommitted changes in the repo
-    if modified_files_in_git_repo():
-        return
+    if not debug:
+        # Die if there are uncommitted changes in the repo
+        if modified_files_in_git_repo():
+            return
 
-    # Write commit hash to model directory
-    os.makedirs(model_dir, exist_ok=True)
-    write_commit_hash_to_model_dir(model_dir)
+        # Write commit hash to model directory
+        os.makedirs(model_dir, exist_ok=True)
+        write_commit_hash_to_model_dir(model_dir)
 
     # Instantiate train and val datasets
     train_images = (
@@ -397,6 +401,7 @@ def train(
         with summary_writer.as_default():
             tf.summary.scalar(
                 "learning rate",
+                # optimizer.learning_rate,
                 optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
@@ -589,6 +594,7 @@ def main(
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
     save_generator_output: bool = False,
+    debug: bool = False,
 ) -> None:
     """
     Main routine.
@@ -622,6 +628,7 @@ def main(
     )
 
     autoencoder = PixelArtVAE(latent_dim=latent_dim)
+    # optimizer = tf.keras.optimizers.Adam(1e-4)
     optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
     # optimizer = tfa.optimizers.AdamW(
@@ -656,6 +663,7 @@ def main(
             latent_dim=latent_dim,
             num_examples_to_generate=num_examples_to_generate,
             continue_from_checkpoint=continue_from_checkpoint,
+            debug=debug,
         )
     elif mode == "generate":
         generate(
@@ -694,6 +702,12 @@ def get_args() -> argparse.Namespace:
         type=str,
         default="/mnt/storage/ml/data/pixel-art/train",
         help="Path to dataset directory, containing training images",
+    )
+    parser.add_argument(
+        "--debug",
+        "-e",
+        action="store_true",
+        help="Don't check git status, current test is just for debugging",
     )
     parser.add_argument(
         "--generator-input",
@@ -743,6 +757,7 @@ def cli_main(args: argparse.Namespace) -> int:
             os.path.expanduser("/mnt/storage/ml/models"), args.model_name
         ),
         dataset_path=args.dataset,
+        debug=args.debug,
         val_path=args.validation_dataset,
         continue_from_checkpoint=args.checkpoint,
         decoder_input=args.generator_input,
