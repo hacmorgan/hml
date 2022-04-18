@@ -170,7 +170,7 @@ def show_reproduction_quality(
     """
     Generate and save images
     """
-    reproductions = autoencoder.call(test_images)
+    reproductions = autoencoder.call(test_images, training=False)
     output_path = os.path.join(
         reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
     )
@@ -390,8 +390,8 @@ def train(
         )
 
         # Get sample of encoder output
-        encoder_output_train = autoencoder.encoder_(train_test_image_batch)
-        encoder_output_val = autoencoder.encoder_(val_test_image_batch)
+        z_mean, z_log_var, encoder_output_train = autoencoder.encoder_(train_test_image_batch)
+        z_mean, z_log_var, encoder_output_val = autoencoder.encoder_(val_test_image_batch)
 
         with summary_writer.as_default():
             tf.summary.scalar(
