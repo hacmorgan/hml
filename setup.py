@@ -15,11 +15,13 @@ setup(
         "hml.architectures.convolutional.decoders",
         "hml.architectures.convolutional.generators",
         "hml.data_pipelines.unsupervised",
+        "hml.layers",
         "hml.models",
     ],
     scripts=[
         "hml/models/pixel_art.py",
         "hml/models/pixel_art_ae.py",
+        "hml/models/pixel_art_vae.py",
     ],
     install_requires=[
         "GitPython",

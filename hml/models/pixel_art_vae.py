@@ -30,16 +30,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
 
-from git import Repo
-
 # import PIL.ImageTk
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow_gan as tfgan
 
 
-from hml.architectures.convolutional.autoencoders.pixel_art_ae import PixelArtAE
-from hml.data_pipelines.unsupervised.pixel_art import PixelArtDataset
+from hml.architectures.convolutional.autoencoders.pixel_art_vae import PixelArtVAE
 from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
 
 
@@ -62,6 +59,7 @@ Loss: {loss}
 
 # This method returns a helper function to compute mean squared error loss
 mse = tf.keras.losses.MeanSquaredError()
+bce = tf.keras.losses.BinaryCrossentropy()
 
 
 global generator_
@@ -72,7 +70,7 @@ global latent_input_canvas
 global generator_output_canvas
 
 
-def check_no_modified_files() -> bool:
+def modified_files_in_git_repo() -> bool:
     """
     Ensure hml has no uncommitted files.
 
@@ -81,23 +79,41 @@ def check_no_modified_files() -> bool:
     parameters.
 
     Returns:
-        True if there are no modified files, False otherwise
+        True if there are modified files, False otherwise
     """
     result = subprocess.run(
-        '(cd "$HOME/src/hml" && git status --porcelain=v1 | grep -v -e "^??" -e "^M")',
+        'cd "$HOME/src/hml" && git status --porcelain=v1 | grep -v -e "^??" -e "^M"',
         shell=True,
+        check=True,
+        stdout=subprocess.PIPE,
     )
-    if result.returncode != 0:
-        return False
     output = result.stdout.decode("utf-8").strip()
     if len(output) > 0:
         print(
             """
-WARNING: Uncommitted code in $HOME/src/hml
+            ERROR: Uncommitted code in $HOME/src/hml
+
+            Commit changes before re-running train
             """,
             file=sys.stderr,
         )
-        return False
+        return True
+    return False
+
+
+def write_commit_hash_to_model_dir(model_dir: str) -> None:
+    """
+    Write the commit hash used for training to the model dir
+    """
+    result = subprocess.run(
+        'cd "$HOME/src/hml" && git rev-parse --verify HEAD',
+        shell=True,
+        check=True,
+        stdout=subprocess.PIPE,
+    )
+    commit_hash = result.stdout.decode("utf-8").strip()
+    with open(os.path.join(model_dir, "commit-hash"), "w") as hashfile:
+        hashfile.write(commit_hash)
 
 
 def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
@@ -171,6 +187,8 @@ def train_step(
     autoencoder: tf.keras.models.Model,
     optimizer: "Optimizer",
     loss_metric: tf.keras.metrics,
+    kl_loss_metric: tf.keras.metrics,
+    reconstruction_loss_metric: tf.keras.metrics,
     latent_dim: int,
 ) -> None:
     """
@@ -181,15 +199,25 @@ def train_step(
         autoencoder: Autoencoder model
         optimizer: Optimizer for model
         loss_metric: Metric for logging generator loss
+        kl_loss_metric: Metric for logging generator loss
+        reconstruction_loss_metric: Metric for logging generator loss
         batch_size: Number of training examples in a batch
         latent_dim: Size of latent space
     """
     with tf.GradientTape() as tape:
-        reproduced_images = autoencoder.call(images)
-        loss = mse(images, reproduced_images)
-    gradients = tape.gradient(loss, autoencoder.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, autoencoder.trainable_variables))
-    loss_metric(loss)  # save loss for plotting
+        z_mean, z_log_var, z = autoencoder.encoder_(images)
+        reconstruction = autoencoder.decoder_(z)
+        reconstruction_loss = tf.reduce_mean(
+            tf.reduce_sum(bce(images, reconstruction), axis=(1, 2, 3))
+        )
+        kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
+        kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
+        total_loss = reconstruction_loss + kl_loss
+    gradients = tape.gradient(total_loss, autoencoder.trainable_weights)
+    optimizer.apply_gradients(zip(gradients, autoencoder.trainable_weights))
+    loss_metric(total_loss)
+    kl_loss_metric(kl_loss)
+    reconstruction_loss_metric(reconstruction_loss)
 
 
 def compute_losses(
@@ -205,8 +233,8 @@ def compute_losses(
     """
     reproduced_train_images = autoencoder.call(train_images, training=False)
     reproduced_val_images = autoencoder.call(val_images, training=False)
-    train_loss = mse(train_images, reproduced_train_images)
-    val_loss = mse(val_images, reproduced_val_images)
+    train_loss = bce(train_images, reproduced_train_images)
+    val_loss = bce(val_images, reproduced_val_images)
     return train_loss, val_loss
 
 
@@ -223,7 +251,7 @@ def train(
     buffer_size: int = 1000,
     batch_size: int = 128,
     epochs_per_turn: int = 1,
-    latent_dim: int = 100,
+    latent_dim: int = 10,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
 ) -> None:
@@ -250,6 +278,9 @@ def train(
         continue_from_checkpoint: Restore weights from checkpoint file if given, start
                                   from scratch otherwise.
     """
+    if modified_files_in_git_repo():
+        return
+    write_commit_hash_to_model_dir(model_dir)
     train_images = (
         tf.data.Dataset.from_generator(
             PixelArtSigmoidDataset(
@@ -305,10 +336,9 @@ def train(
     summary_writer = tf.summary.create_file_writer(log_dir)
 
     # Use the same seed throughout training, to see what the model does with the same input as it trains.
-    seed = tf.random.normal([num_examples_to_generate, latent_dim])
-
-    # track steps for tensorboard
-    total_steps = 0
+    seed = tf.random.uniform(
+        shape=[num_examples_to_generate, latent_dim], minval=-1, maxval=1
+    )
 
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
@@ -350,7 +380,8 @@ def train(
         )
 
         # Get sample of encoder output
-        encoder_output = autoencoder.encoder_(image_batch[0:1, ...])
+        encoder_output_train = autoencoder.encoder_(train_test_image_batch)
+        encoder_output_val = autoencoder.encoder_(val_test_image_batch)
 
         with summary_writer.as_default():
             tf.summary.scalar(
@@ -358,20 +389,34 @@ def train(
                 optimizer.learning_rate(),
                 step=epoch,
             )
-            tf.summary.histogram("encoder output", encoder_output, step=epoch)
+            tf.summary.histogram(
+                "encoder output train", encoder_output_train, step=epoch
+            )
+            tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
             tf.summary.scalar(
-                "encoder output mean",
-                np.mean(encoder_output.numpy()),
+                "encoder output train: mean",
+                np.mean(encoder_output_train.numpy()),
                 step=epoch,
             )
             tf.summary.scalar(
-                "encoder output stddev",
-                np.std(encoder_output.numpy()),
+                "encoder output train: stddev",
+                np.std(encoder_output_train.numpy()),
                 step=epoch,
             )
-            # tf.summary.scalar("loss", loss_metric.result(), step=epoch)
+            tf.summary.scalar(
+                "encoder output val: mean",
+                np.mean(encoder_output_val.numpy()),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "encoder output val: stddev",
+                np.std(encoder_output_val.numpy()),
+                step=epoch,
+            )
+            tf.summary.scalar("loss metric", loss_metric.result(), step=epoch)
             tf.summary.scalar("train loss", train_loss, step=epoch)
             tf.summary.scalar("validation loss", val_loss, step=epoch)
+            # tf.summary.image("dd", step=epoch)
 
         # Save the model every 15 epochs
         if (epoch + 1) % 15 == 0:
@@ -526,7 +571,7 @@ def main(
     buffer_size: int = 20000,
     batch_size: int = 64,
     epochs_per_turn: int = 1,
-    latent_dim: int = 100,
+    latent_dim: int = 10,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
@@ -553,20 +598,17 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    start_lr = 1e-4
-
-    STEPS_PER_EPOCH = 105
+    STEPS_PER_EPOCH = 365
 
     clr = tfa.optimizers.CyclicalLearningRate(
         initial_learning_rate=1e-4,
         maximal_learning_rate=1e-3,
         scale_fn=lambda x: 1 / (1.2 ** (x - 1)),
         # scale_fn=lambda x: 1 / (2.0 ** (x - 1)),
-        # step_size=3 * STEPS_PER_EPOCH,
-        step_size=7 * STEPS_PER_EPOCH,
+        step_size=3 * STEPS_PER_EPOCH,
     )
 
-    autoencoder = PixelArtAE(latent_dim=latent_dim)
+    autoencoder = PixelArtVAE(latent_dim=latent_dim)
     # optimizer = tf.keras.optimizers.Adam(clr)
     optimizer = tfa.optimizers.AdamW(
         weight_decay=lambda step: 1e-4 * clr(step), learning_rate=clr
@@ -636,7 +678,7 @@ def get_args() -> argparse.Namespace:
         "--dataset",
         "-d",
         type=str,
-        required=True,
+        default="/mnt/storage/ml/data/train",
         help="Path to dataset directory, containing training images",
     )
     parser.add_argument(
@@ -662,7 +704,7 @@ def get_args() -> argparse.Namespace:
         "--validation-dataset",
         "-v",
         type=str,
-        required=True,
+        default="/mnt/storage/ml/data/val",
         help="Path to dataset directory, containing images to test with",
     )
     return parser.parse_args()
