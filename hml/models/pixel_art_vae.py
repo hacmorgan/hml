@@ -344,8 +344,8 @@ def train(
     summary_writer = tf.summary.create_file_writer(log_dir)
 
     # Use the same seed throughout training, to see what the model does with the same input as it trains.
-    seed = tf.random.uniform(
-        shape=[num_examples_to_generate, latent_dim], minval=-1, maxval=1
+    seed = tf.random.normal(
+        shape=[num_examples_to_generate, latent_dim]
     )
 
     for epoch in range(epoch_start, epoch_stop):
@@ -621,11 +621,11 @@ def main(
     )
 
     autoencoder = PixelArtVAE(latent_dim=latent_dim)
-    # optimizer = tf.keras.optimizers.Adam(clr)
-    step = tf.Variable(0, trainable=False)
-    optimizer = tfa.optimizers.AdamW(
-        weight_decay=lambda: 1e-4 * clr(step), learning_rate=clr
-    )
+    optimizer = tf.keras.optimizers.Adam(clr)
+    # step = tf.Variable(0, trainable=False)
+    # optimizer = tfa.optimizers.AdamW(
+    #     weight_decay=lambda: 1e-4 * clr(step), learning_rate=clr
+    # )
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
