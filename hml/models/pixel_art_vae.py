@@ -334,6 +334,8 @@ def train(
 
     # Define our metrics
     loss_metric = tf.keras.metrics.Mean("loss", dtype=tf.float32)
+    kl_loss_metric = tf.keras.metrics.Mean("kl_loss", dtype=tf.float32)
+    reconstruction_loss_metric = tf.keras.metrics.Mean("reconstruction_loss", dtype=tf.float32)
 
     # Set up logs
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -355,6 +357,8 @@ def train(
                 autoencoder=autoencoder,
                 optimizer=optimizer,
                 loss_metric=loss_metric,
+                kl_loss_metric=kl_loss_metric,
+                reconstruction_loss_metric=reconstruction_loss_metric,
                 latent_dim=latent_dim,
             )
 
@@ -419,6 +423,8 @@ def train(
                 step=epoch,
             )
             tf.summary.scalar("loss metric", loss_metric.result(), step=epoch)
+            tf.summary.scalar("kl loss metric", kl_loss_metric.result(), step=epoch)
+            tf.summary.scalar("reconstruction loss metric", reconstruction_loss_metric.result(), step=epoch)
             tf.summary.scalar("train loss", train_loss, step=epoch)
             tf.summary.scalar("validation loss", val_loss, step=epoch)
             # tf.summary.image("dd", step=epoch)
