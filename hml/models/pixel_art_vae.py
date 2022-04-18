@@ -624,7 +624,7 @@ def main(
     # optimizer = tf.keras.optimizers.Adam(clr)
     step = tf.Variable(0, trainable=False)
     optimizer = tfa.optimizers.AdamW(
-        weight_decay=lambda: 1e-4 * clr(step), learning_rate=clr
+        weight_decay=clr, learning_rate=clr
     )
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
