@@ -22,8 +22,11 @@ setup(
         "hml/models/pixel_art_ae.py",
     ],
     install_requires=[
+        "GitPython",
         "opencv-python",
         "matplotlib",
+        "pygobject",
+        "pycairo",
         "tensorflow",
         "tensorflow_addons",
         "tensorflow_gan",

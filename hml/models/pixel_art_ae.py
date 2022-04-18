@@ -14,17 +14,24 @@ from typing import Iterable, List, Optional, Tuple
 import argparse
 import datetime
 import os
+import subprocess
 import sys
+import threading
 import time
+
 # import tkinter
 
 import matplotlib
-matplotlib.use("GTK3Agg")
+
+# matplotlib.use("GTK3Agg")
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
+
+from git import Repo
+
 # import PIL.ImageTk
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -45,6 +52,13 @@ Time: {epoch_time}
 Loss: {loss}
 """
 
+# # Still TBD whether config is worth it
+# DEFAULT_CONFIG = {
+#     "train_ds": "/mnt/storage/ml/data/pixel-art/train",
+#     "val_ds": "/mnt/storage/ml/data/pixel-art/val",
+#     "model_name": datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
+# }
+
 
 # This method returns a helper function to compute mean squared error loss
 mse = tf.keras.losses.MeanSquaredError()
@@ -58,28 +72,94 @@ global latent_input_canvas
 global generator_output_canvas
 
 
+def check_no_modified_files() -> bool:
+    """
+    Ensure hml has no uncommitted files.
+
+    It is required that the git hash is written to the model dir, to ensure the same
+    code that was used for training can be retrieved later and paired with the trained
+    parameters.
+
+    Returns:
+        True if there are no modified files, False otherwise
+    """
+    result = subprocess.run('(cd "$HOME/src/hml" && git status --porcelain=v1 | grep -v -e "^??" -e "^M")', shell=True)
+    if result.returncode != 0:
+        return False
+    output = result.stdout.decode("utf-8").strip()
+    if len(output) > 0:
+        print(
+            """
+WARNING: Uncommitted code in $HOME/src/hml
+            """,
+            file=sys.stderr
+        )
+        return False
+
+
+def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
+    """
+    Actually generate the image and save it.
+
+    This is done in a separate thread to avoid waiting for io.
+    """
+    for i in range(predictions.shape[0]):
+        plt.subplot(4, 4, i + 1)
+        generated_rgb_image = np.array((predictions[i, :, :, :] * 255)).astype(np.uint8)
+        # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
+        plt.imshow(generated_rgb_image)
+        plt.axis("off")
+    plt.savefig(output_path, dpi=250)
+
+
+def reproduce_save_image(
+    test_images: tf.Tensor, reproductions: tf.Tensor, output_path: str
+) -> None:
+    """
+    Regenerate some images and save to file.
+
+    This is done in a separate thread to avoid waiting for io.
+    """
+    for i, (test_image, reproduction) in enumerate(zip(test_images, reproductions)):
+        plt.subplot(2, 4, i + 1)
+        stacked = tf.concat([test_image, reproduction], axis=0)
+        rgb_image = np.array((stacked * 255.0)).astype(np.uint8)
+        plt.imshow(rgb_image)
+        plt.axis("off")
+    plt.savefig(output_path, dpi=250)
+
+
 def generate_and_save_images(
-    decoder: tf.keras.Sequential, epoch: int, test_input: tf.Tensor, model_dir: str
+    decoder: tf.keras.Sequential, epoch: int, test_input: tf.Tensor, progress_dir: str
 ) -> None:
     """
     Generate and save images
     """
     predictions = decoder(test_input, training=False)
+    output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
+    # threading.Thread(
+    #     target=generate_save_image, args=(predictions, output_path)
+    # ).start()
+    generate_save_image(predictions, output_path)
 
-    # Clear the figure (prevents memory leaks)
-    plt.cla()
 
-    for i in range(predictions.shape[0]):
-        plt.subplot(4, 4, i + 1)
-        generated_rgb_image = np.array(
-            (predictions[i, :, :, :] * 255)
-        ).astype(np.uint8)
-        # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
-        plt.imshow(generated_rgb_image)
-        plt.axis("off")
-
-    os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
-    plt.savefig(os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png"), dpi=250)
+def show_reproduction_quality(
+    autoencoder: tf.keras.models.Model,
+    epoch: int,
+    test_images: tf.Tensor,
+    reproductions_dir: str,
+) -> None:
+    """
+    Generate and save images
+    """
+    reproductions = autoencoder.call(test_images)
+    output_path = os.path.join(
+        reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
+    )
+    # threading.Thread(
+    #     target=reproduce_save_image, args=(test_images, reproductions, output_path)
+    # ).start()
+    reproduce_save_image(test_images, reproductions, output_path)
 
 
 @tf.function
@@ -105,10 +185,26 @@ def train_step(
         reproduced_images = autoencoder.call(images)
         loss = mse(images, reproduced_images)
     gradients = tape.gradient(loss, autoencoder.trainable_variables)
-    optimizer.apply_gradients(
-        zip(gradients, autoencoder.trainable_variables)
-    )
+    optimizer.apply_gradients(zip(gradients, autoencoder.trainable_variables))
     loss_metric(loss)  # save loss for plotting
+
+
+def compute_losses(
+    autoencoder: tf.keras.models.Model, train_images: tf.Tensor, val_images: tf.Tensor
+) -> Tuple[float, float]:
+    """
+    Compute loss on training and validation data.
+
+    Args:
+        autoencoder: Autoencoder model
+        train_images: Batch of training data
+        val_images: Batch of validation data
+    """
+    reproduced_train_images = autoencoder.call(train_images, training=False)
+    reproduced_val_images = autoencoder.call(val_images, training=False)
+    train_loss = mse(train_images, reproduced_train_images)
+    val_loss = mse(val_images, reproduced_val_images)
+    return train_loss, val_loss
 
 
 def train(
@@ -118,6 +214,7 @@ def train(
     checkpoint: tf.train.Checkpoint,
     checkpoint_prefix: str,
     dataset_path: str,
+    val_path: str,
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
     buffer_size: int = 1000,
@@ -139,6 +236,7 @@ def train(
         checkpoint: Checkpoint to save to
         checkpoint_prefix: Prefix to checkpoint numbers in checkpoint filenames
         dataset_path: Path to directory tree containing training data
+        val_path: Path to directory tree containing data to be used for validation
         epochs: How many full passes through the dataset to make
         train_crop_shape: Desired shape of training crops from full images
         buffer_size: Number of images to randomly sample from at a time
@@ -151,13 +249,39 @@ def train(
     """
     train_images = (
         tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(dataset_path=dataset_path, crop_shape=train_crop_shape),
+            PixelArtSigmoidDataset(
+                dataset_path=dataset_path, crop_shape=train_crop_shape
+            ),
             output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
         )
         .shuffle(buffer_size)
         .batch(batch_size)
         .cache()
         .prefetch(tf.data.AUTOTUNE)
+    )
+    val_images = (
+        tf.data.Dataset.from_generator(
+            PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
+            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        )
+        .shuffle(buffer_size)
+        .batch(batch_size)
+    )
+
+    # Save a few images for visualisation
+    train_test_image_batch = next(iter(train_images))
+    train_test_images = train_test_image_batch[:8, ...]
+    val_test_image_batch = next(iter(val_images))
+    val_test_images = val_test_image_batch[:8, ...]
+
+    # Make progress dir and reproductions dir for outputs
+    os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
+    os.makedirs(
+        reproductions_dir := os.path.join(model_dir, "reproductions"), exist_ok=True
+    )
+    os.makedirs(
+        val_reproductions_dir := os.path.join(model_dir, "val_reproductions"),
+        exist_ok=True,
     )
 
     # Set epochs accoridng
@@ -174,9 +298,7 @@ def train(
 
     # Set up logs
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    log_dir = os.path.join(
-        model_dir, "logs", "gradient_tape", current_time
-    )
+    log_dir = os.path.join(model_dir, "logs", "gradient_tape", current_time)
     summary_writer = tf.summary.create_file_writer(log_dir)
 
     # Use the same seed throughout training, to see what the model does with the same input as it trains.
@@ -198,12 +320,6 @@ def train(
                 latent_dim=latent_dim,
             )
 
-            with summary_writer.as_default():
-                tf.summary.scalar(
-                    "loss", loss_metric.result(), step=total_steps
-                )
-                total_steps += 1
-
             if step % 5 == 0:
                 print(
                     UPDATE_TEMPLATE.format(
@@ -215,11 +331,51 @@ def train(
                 )
 
         # Produce demo output every epoch the generator trains
-        generate_and_save_images(autoencoder.decoder_, epoch + 1, seed, model_dir)
+        generate_and_save_images(autoencoder.decoder_, epoch + 1, seed, progress_dir)
+
+        # Show some examples of how the model reconstructs its inputs.
+        show_reproduction_quality(
+            autoencoder, epoch + 1, train_test_images, reproductions_dir
+        )
+        show_reproduction_quality(
+            autoencoder, epoch + 1, val_test_images, val_reproductions_dir
+        )
+
+        # Compute loss on training and validation data
+        train_loss, val_loss = compute_losses(
+            autoencoder, train_test_image_batch, val_test_image_batch
+        )
+
+        # Get sample of encoder output
+        encoder_output = autoencoder.encoder_(image_batch[0:1, ...])
+
+        with summary_writer.as_default():
+            tf.summary.scalar(
+                "learning rate",
+                optimizer.learning_rate(),
+                step=epoch,
+            )
+            tf.summary.histogram("encoder output", encoder_output, step=epoch)
+            tf.summary.scalar(
+                "encoder output mean",
+                np.mean(encoder_output.numpy()),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "encoder output stddev",
+                np.std(encoder_output.numpy()),
+                step=epoch,
+            )
+            # tf.summary.scalar("loss", loss_metric.result(), step=epoch)
+            tf.summary.scalar("train loss", train_loss, step=epoch)
+            tf.summary.scalar("validation loss", val_loss, step=epoch)
 
         # Save the model every 15 epochs
         if (epoch + 1) % 15 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
+
+            # Also close all pyplot figures. It is expensive to do this every epoch
+            plt.close("all")
 
             # Write our last epoch down in case we want to continue
             with open(epoch_log_file, "w", encoding="utf-8") as epoch_log:
@@ -361,9 +517,10 @@ def main(
     mode: str,
     model_dir: str,
     dataset_path: str,
+    val_path: str,
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
-    buffer_size: int = 1000,
+    buffer_size: int = 20000,
     batch_size: int = 64,
     epochs_per_turn: int = 1,
     latent_dim: int = 100,
@@ -379,6 +536,7 @@ def main(
         mode: One of "train" "generate" "discriminate"
         model_dir: Working dir for this experiment
         dataset_path: Path to directory tree containing training data
+        val_path: Path to directory tree containing data to be used for validation
         epochs: How many full passes through the dataset to make
         train_crop_shape: Desired shape of training crops from full images
         buffer_size: Number of images to randomly sample from at a time
@@ -394,8 +552,20 @@ def main(
     """
     start_lr = 1e-4
 
+    STEPS_PER_EPOCH = 105
+
+    clr = tfa.optimizers.CyclicalLearningRate(
+        initial_learning_rate=1e-4,
+        maximal_learning_rate=1e-3,
+        scale_fn=lambda x: 1 / (1.2 ** (x - 1)),
+        # scale_fn=lambda x: 1 / (2.0 ** (x - 1)),
+        # step_size=3 * STEPS_PER_EPOCH,
+        step_size=7 * STEPS_PER_EPOCH,
+    )
+
     autoencoder = PixelArtAE(latent_dim=latent_dim)
-    optimizer = tf.keras.optimizers.Adam(start_lr)
+    # optimizer = tf.keras.optimizers.Adam(clr)
+    optimizer = tfa.optimizers.AdamW(weight_decay=lambda step: 1e-4 * clr(step), learning_rate=clr)
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
@@ -416,6 +586,7 @@ def main(
             checkpoint=checkpoint,
             checkpoint_prefix=checkpoint_prefix,
             dataset_path=dataset_path,
+            val_path=val_path,
             epochs=epochs,
             train_crop_shape=train_crop_shape,
             buffer_size=buffer_size,
@@ -460,7 +631,7 @@ def get_args() -> argparse.Namespace:
         "--dataset",
         "-d",
         type=str,
-        default="./training-data",
+        required=True,
         help="Path to dataset directory, containing training images",
     )
     parser.add_argument(
@@ -481,6 +652,13 @@ def get_args() -> argparse.Namespace:
         "-s",
         action="store_true",
         help="Save generator output to file instead of displaying",
+    )
+    parser.add_argument(
+        "--validation-dataset",
+        "-v",
+        type=str,
+        required=True,
+        help="Path to dataset directory, containing images to test with",
     )
     return parser.parse_args()
 
@@ -504,6 +682,7 @@ def cli_main(args: argparse.Namespace) -> int:
             os.path.expanduser("/mnt/storage/ml/models"), args.model_name
         ),
         dataset_path=args.dataset,
+        val_path=args.validation_dataset,
         continue_from_checkpoint=args.checkpoint,
         decoder_input=args.generator_input,
         save_generator_output=args.save_output,

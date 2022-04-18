@@ -17,7 +17,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 padding="same",
                 activation="relu",
                 input_shape=(64, 64, 3),
-                # kernel_initializer=init,
+                kernel_initializer=init,
             ),
             # Half input size conv layer (output shape: 16, 16, 256)
             layers.Dropout(0.3),
@@ -28,7 +28,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 activation="relu",
-                # kernel_initializer=init,
+                kernel_initializer=init,
             ),
             # Quarter input size conv layer (output shape: 8, 8, 512)
             layers.Dropout(0.3),
@@ -39,7 +39,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 activation="relu",
-                # kernel_initializer=init,
+                kernel_initializer=init,
             ),
             # Eighth input size conv layer (output shape: 4, 4, 1024)
             layers.Dropout(0.3),
@@ -50,13 +50,13 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 activation="relu",
-                # kernel_initializer=init,
+                kernel_initializer=init,
             ),
             # Latent output
             layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Flatten(),
-            layers.Dense(latent_dim, activation="relu"),
+            layers.Dense(latent_dim, activation="relu", kernel_initializer=init),
             # BatchNorm so that noise can be input at generation time
             layers.BatchNormalization(),
         ]
