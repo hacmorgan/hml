@@ -683,7 +683,7 @@ def get_args() -> argparse.Namespace:
         "--dataset",
         "-d",
         type=str,
-        default="/mnt/storage/ml/data/train",
+        default="/mnt/storage/ml/data/pixel-art/train",
         help="Path to dataset directory, containing training images",
     )
     parser.add_argument(
@@ -709,7 +709,7 @@ def get_args() -> argparse.Namespace:
         "--validation-dataset",
         "-v",
         type=str,
-        default="/mnt/storage/ml/data/val",
+        default="/mnt/storage/ml/data/pixel-art/val",
         help="Path to dataset directory, containing images to test with",
     )
     return parser.parse_args()
