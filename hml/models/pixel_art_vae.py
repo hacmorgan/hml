@@ -636,7 +636,8 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    STEPS_PER_EPOCH = 1410
+    # STEPS_PER_EPOCH = 1410  # with x4 augmentation
+    STEPS_PER_EPOCH = 365  # with no augmentation
 
     clr = tfa.optimizers.CyclicalLearningRate(
         initial_learning_rate=1e-4,
