@@ -608,7 +608,7 @@ def main(
     buffer_size: int = 20000,
     batch_size: int = 64,
     epochs_per_turn: int = 1,
-    latent_dim: int = 100,
+    latent_dim: int = 200,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
