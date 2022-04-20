@@ -21,9 +21,9 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
-import PIL.ImageTk
+# import PIL.ImageTk
 import tensorflow as tf
-import tkinter
+# import tkinter
 
 
 def crops_from_full_size(

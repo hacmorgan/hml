@@ -473,6 +473,7 @@ def train(
 def generate(
     decoder: tf.keras.Sequential,
     decoder_input: Optional[str] = None,
+    latent_dim: int = 50,
     save_output: bool = False,
 ) -> None:
     """
@@ -487,9 +488,9 @@ def generate(
     if decoder_input is not None:
         input_raw = tf.io.read_file(decoder_input)
         input_decoded = tf.image.decode_image(input_raw)
-        latent_input = tf.reshape(input_decoded, [1, 100])
+        latent_input = tf.reshape(input_decoded, [1, latent_dim])
     else:
-        latent_input = tf.random.normal([1, 100])
+        latent_input = tf.random.normal([1, latent_dim])
     i = 0
     while True:
         generated_rgb_image = np.array(
@@ -506,7 +507,7 @@ def generate(
             i += 1
         else:
             plt.show()
-        latent_input = tf.random.normal([1, 100])
+        latent_input = tf.random.normal([1, latent_dim])
 
 
 def regenerate_images(slider_value: Optional[float] = None) -> None:
@@ -690,6 +691,7 @@ def main(
         generate(
             decoder=autoencoder.decoder_,
             decoder_input=decoder_input,
+            latent_dim=latent_dim,
             save_output=save_generator_output,
         )
     elif mode == "view-latent-space":
