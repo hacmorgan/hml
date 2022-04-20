@@ -2,10 +2,10 @@ import tensorflow as tf
 from tensorflow.keras import layers
 
 from hml.architectures.convolutional.decoders import (
-    pixel_art_vae_decoder, pixel_art_vae_decoder_sequential
+    pixel_art_vae_decoder, pixel_art_vae_decoder_sequential, pixel_art_vae_decoder_sequential_more_layers
 )
 from hml.architectures.convolutional.encoders import (
-    pixel_art_vae_encoder, pixel_art_vae_encoder_sequential
+    pixel_art_vae_encoder, pixel_art_vae_encoder_sequential, pixel_art_vae_encoder_sequential_more_layers
 )
 
 
@@ -20,8 +20,8 @@ class PixelArtVAE(tf.keras.models.Model):
         """
         super().__init__()
         self.latent_dim_ = latent_dim
-        self.encoder_ = pixel_art_vae_encoder_sequential.model(latent_dim=self.latent_dim_)
-        self.decoder_ = pixel_art_vae_decoder_sequential.model(latent_dim=self.latent_dim_)
+        self.encoder_ = pixel_art_vae_encoder_sequential_more_layers.model(latent_dim=self.latent_dim_)
+        self.decoder_ = pixel_art_vae_decoder_sequential_more_layers.model(latent_dim=self.latent_dim_)
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"

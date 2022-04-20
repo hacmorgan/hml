@@ -220,22 +220,6 @@ def train_step(
         batch_size: Number of training examples in a batch
         latent_dim: Size of latent space
     """
-    # with tf.GradientTape() as tape:
-    #     z_mean, z_log_var, z = autoencoder.encoder_(images)
-    #     reconstruction = autoencoder.decoder_(z)
-    #     # reconstruction_loss = tf.reduce_mean(
-    #     #     tf.reduce_sum(bce(images, reconstruction))
-    #     #     # tf.reduce_sum(bce(images, reconstruction), axis=(1, 2))
-    #     # )
-    #     reconstruction_loss = mse(images, reconstruction)
-    #     kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
-    #     kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-    #     total_loss = reconstruction_loss  # + 1e-4 * kl_loss
-    # gradients = tape.gradient(total_loss, autoencoder.trainable_variables)
-    # optimizer.apply_gradients(zip(gradients, autoencoder.trainable_variables))
-    # loss_metric(total_loss)
-    # kl_loss_metric(kl_loss)
-    # reconstruction_loss_metric(reconstruction_loss)
     with tf.GradientTape() as tape:
         loss = compute_loss(autoencoder, images)
     loss_metric(loss)
@@ -361,8 +345,6 @@ def train(
 
     # Define our metrics
     loss_metric = tf.keras.metrics.Mean("loss", dtype=tf.float32)
-    kl_loss_metric = tf.keras.metrics.Mean("kl_loss", dtype=tf.float32)
-    reconstruction_loss_metric = tf.keras.metrics.Mean("reconstruction_loss", dtype=tf.float32)
 
     # Set up logs
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -455,7 +437,7 @@ def train(
             # tf.summary.scalar("reconstruction loss metric", reconstruction_loss_metric.result(), step=epoch)
             tf.summary.scalar("train loss", train_loss, step=epoch)
             tf.summary.scalar("validation loss", val_loss, step=epoch)
-            # tf.summary.image("dd", step=epoch)
+            # tf.summary.image("", step=epoch)
 
         # Save the model every 15 epochs
         if (epoch + 1) % 15 == 0:
@@ -647,8 +629,8 @@ def main(
     clr = tfa.optimizers.CyclicalLearningRate(
         # initial_learning_rate=1e-4,
         # maximal_learning_rate=1e-3,
-        initial_learning_rate=3e-5,
-        maximal_learning_rate=3e-4,
+        initial_learning_rate=5e-5,
+        maximal_learning_rate=5e-4,
         scale_fn=lambda x: 1 / (1.2 ** (x - 1)),
         # scale_fn=lambda x: 1 / (2.0 ** (x - 1)),
         step_size=3 * STEPS_PER_EPOCH,
