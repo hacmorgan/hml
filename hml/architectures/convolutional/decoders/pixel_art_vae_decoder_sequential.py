@@ -20,7 +20,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             layers.Reshape((4, 4, 1024)),
             # 1. upscale by fractionally strided conv, (8, 8, 512)
-            layers.Dropout(0.3),
+            # layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 512,
@@ -31,7 +31,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # 2. upscale by fractionally strided conv, (16, 16, 256)
-            layers.Dropout(0.3),
+            # layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 256,
@@ -42,7 +42,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # 3. upscale by fractionally strided conv, (32, 32, 128)
-            layers.Dropout(0.3),
+            # layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 128,

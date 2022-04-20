@@ -21,7 +21,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Half input size conv layer (output shape: 16, 16, 256)
-            layers.Dropout(0.3),
+            # layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
                 256,
@@ -32,7 +32,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Quarter input size conv layer (output shape: 8, 8, 512)
-            layers.Dropout(0.3),
+            # layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
                 512,
@@ -43,7 +43,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Eighth input size conv layer (output shape: 4, 4, 1024)
-            layers.Dropout(0.3),
+            # layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Conv2D(
                 1024,
@@ -54,7 +54,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Latent output (No activation)
-            layers.Dropout(0.3),
+            # layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Flatten(),
             layers.Dense(2*latent_dim, kernel_initializer=init),

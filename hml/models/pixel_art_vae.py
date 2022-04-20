@@ -651,11 +651,11 @@ def main(
 
     autoencoder = PixelArtVAE(latent_dim=latent_dim)
     # optimizer = tf.keras.optimizers.Adam(1e-4)
-    # optimizer = tf.keras.optimizers.Adam(clr)
+    optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
-    optimizer = tfa.optimizers.AdamW(
-        weight_decay=clr, learning_rate=clr
-    )
+    # optimizer = tfa.optimizers.AdamW(
+    #     weight_decay=clr, learning_rate=clr
+    # )
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
