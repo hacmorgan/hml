@@ -622,9 +622,10 @@ def main(
         save_generator_output: Save generated images instead of displaying
     """
     # STEPS_PER_EPOCH = 1410  # with x4 augmentation
-    STEPS_PER_EPOCH = 705  # with x2 augmentation
+    # STEPS_PER_EPOCH = 705  # with x2 augmentation
     # STEPS_PER_EPOCH = 350  # with no augmentation
     # STEPS_PER_EPOCH = 215  # eboy with x2 augmentation
+    STEPS_PER_EPOCH = 180  # x2 augmentation, 128x128 crops
 
     clr = tfa.optimizers.CyclicalLearningRate(
         # initial_learning_rate=1e-4,
