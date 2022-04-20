@@ -414,8 +414,10 @@ def train(
         )
 
         # Get sample of encoder output
-        # z_mean, z_log_var, encoder_output_train = autoencoder.encoder_(train_test_image_batch)
-        # z_mean, z_log_var, encoder_output_val = autoencoder.encoder_(val_test_image_batch)
+        z_mean, z_log_var = autoencoder.encode(train_test_image_batch)
+        encoder_output_train = autoencoder.reparameterize(z_mean, z_log_var)
+        z_mean, z_log_var = autoencoder.encode(val_test_image_batch)
+        encoder_output_val = autoencoder.reparameterize(z_mean, z_log_var)
 
         with summary_writer.as_default():
             tf.summary.scalar(
@@ -424,10 +426,10 @@ def train(
                 optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
-            # tf.summary.histogram(
-            #     "encoder output train", encoder_output_train, step=epoch
-            # )
-            # tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
+            tf.summary.histogram(
+                "encoder output train", encoder_output_train, step=epoch
+            )
+            tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
             # tf.summary.scalar(
             #     "encoder output train: mean",
             #     np.mean(encoder_output_train.numpy()),
@@ -494,7 +496,7 @@ def generate(
     i = 0
     while True:
         generated_rgb_image = np.array(
-            (autoencoder.sample(latent_input, training=False)[0, :, :, :] * 255.0)
+            (autoencoder.sample(latent_input)[0, :, :, :] * 255.0)
         ).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.close("all")
