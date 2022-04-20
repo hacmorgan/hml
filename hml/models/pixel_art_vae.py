@@ -629,7 +629,7 @@ def main(
     clr = tfa.optimizers.CyclicalLearningRate(
         # initial_learning_rate=1e-4,
         # maximal_learning_rate=1e-3,
-        initial_learning_rate=5e-5,
+        initial_learning_rate=8e-5,
         maximal_learning_rate=5e-4,
         scale_fn=lambda x: 1 / (1.2 ** (x - 1)),
         # scale_fn=lambda x: 1 / (2.0 ** (x - 1)),
