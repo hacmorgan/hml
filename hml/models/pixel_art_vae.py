@@ -471,7 +471,7 @@ def train(
 
 
 def generate(
-    decoder: tf.keras.Sequential,
+    autoencoder: tf.keras.models.Model,
     decoder_input: Optional[str] = None,
     latent_dim: int = 50,
     save_output: bool = False,
@@ -494,7 +494,7 @@ def generate(
     i = 0
     while True:
         generated_rgb_image = np.array(
-            (decoder(latent_input, training=False)[0, :, :, :] * 255.0)
+            (autoencoder.sample(latent_input, training=False)[0, :, :, :] * 255.0)
         ).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.close("all")
@@ -638,9 +638,9 @@ def main(
         save_generator_output: Save generated images instead of displaying
     """
     # STEPS_PER_EPOCH = 1410  # with x4 augmentation
-    # STEPS_PER_EPOCH = 705  # with x2 augmentation
+    STEPS_PER_EPOCH = 705  # with x2 augmentation
     # STEPS_PER_EPOCH = 350  # with no augmentation
-    STEPS_PER_EPOCH = 215  # eboy with x2 augmentation
+    # STEPS_PER_EPOCH = 215  # eboy with x2 augmentation
 
     clr = tfa.optimizers.CyclicalLearningRate(
         # initial_learning_rate=1e-4,
@@ -692,7 +692,7 @@ def main(
         )
     elif mode == "generate":
         generate(
-            decoder=autoencoder.decoder_,
+            autoencoder=autoencoder,
             decoder_input=decoder_input,
             latent_dim=latent_dim,
             save_output=save_generator_output,
