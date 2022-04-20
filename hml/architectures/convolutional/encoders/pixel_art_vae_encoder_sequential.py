@@ -57,7 +57,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             # layers.Dropout(0.3),
             layers.BatchNormalization(),
             layers.Flatten(),
-            layers.Dense(2*latent_dim, kernel_initializer=init),
+            layers.Dense(2 * latent_dim, kernel_initializer=init),
             # BatchNorm so that noise can be input at generation time
         ]
     )

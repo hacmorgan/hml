@@ -148,7 +148,10 @@ def reproduce_save_image(
 
 
 def generate_and_save_images(
-    autoencoder: tf.keras.Sequential, epoch: int, test_input: tf.Tensor, progress_dir: str
+    autoencoder: tf.keras.Sequential,
+    epoch: int,
+    test_input: tf.Tensor,
+    progress_dir: str,
 ) -> None:
     """
     Generate and save images
@@ -182,10 +185,10 @@ def show_reproduction_quality(
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
-    log2pi = tf.math.log(2. * np.pi)
+    log2pi = tf.math.log(2.0 * np.pi)
     return tf.reduce_sum(
-        -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
-        axis=raxis)
+        -0.5 * ((sample - mean) ** 2.0 * tf.exp(-logvar) + logvar + log2pi), axis=raxis
+    )
 
 
 def compute_loss(model, x):
@@ -194,7 +197,7 @@ def compute_loss(model, x):
     x_logit = model.decode(z)
     cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
     logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
-    logpz = log_normal_pdf(z, 0., 0.)
+    logpz = log_normal_pdf(z, 0.0, 0.0)
     logqz_x = log_normal_pdf(z, mean, logvar)
     return -tf.reduce_mean(logpx_z + logpz - logqz_x)
 
@@ -225,7 +228,6 @@ def train_step(
     loss_metric(loss)
     gradients = tape.gradient(loss, autoencoder.trainable_variables)
     optimizer.apply_gradients(zip(gradients, autoencoder.trainable_variables))
-
 
 
 def compute_losses(
@@ -352,9 +354,7 @@ def train(
     summary_writer = tf.summary.create_file_writer(log_dir)
 
     # Use the same seed throughout training, to see what the model does with the same input as it trains.
-    seed = tf.random.normal(
-        shape=[num_examples_to_generate, latent_dim]
-    )
+    seed = tf.random.normal(shape=[num_examples_to_generate, latent_dim])
 
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
@@ -589,7 +589,7 @@ def main(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
+    train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 20000,
     batch_size: int = 64,
     epochs_per_turn: int = 1,

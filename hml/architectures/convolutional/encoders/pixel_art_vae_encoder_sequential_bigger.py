@@ -10,8 +10,17 @@ def model(latent_dim: int) -> tf.keras.Sequential:
     architecture = tf.keras.Sequential(
         [
             # Input
-            layers.InputLayer(input_shape=(64, 64, 3)),
-            # Input size conv layer (output shape: 32, 32, 128)
+            layers.InputLayer(input_shape=(128, 128, 3)),
+            # Input size conv layer (output shape: 64, 64, 128)
+            layers.Conv2D(
+                64,
+                kernel_size=5,
+                strides=1,
+                padding="same",
+                activation="relu",
+                kernel_initializer=init,
+            ),
+            layers.BatchNormalization(),
             layers.Conv2D(
                 64,
                 kernel_size=5,
@@ -29,8 +38,17 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 activation="relu",
                 kernel_initializer=init,
             ),
-            # Half input size conv layer (output shape: 16, 16, 256)
+            # Half input size conv layer (output shape: 32, 32, 256)
             # layers.Dropout(0.3),
+            layers.BatchNormalization(),
+            layers.Conv2D(
+                128,
+                kernel_size=5,
+                strides=1,
+                padding="same",
+                activation="relu",
+                kernel_initializer=init,
+            ),
             layers.BatchNormalization(),
             layers.Conv2D(
                 128,
@@ -49,8 +67,17 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 activation="relu",
                 kernel_initializer=init,
             ),
-            # Quarter input size conv layer (output shape: 8, 8, 512)
+            # Quarter input size conv layer (output shape: 16, 16, 512)
             # layers.Dropout(0.3),
+            layers.BatchNormalization(),
+            layers.Conv2D(
+                256,
+                kernel_size=5,
+                strides=1,
+                padding="same",
+                activation="relu",
+                kernel_initializer=init,
+            ),
             layers.BatchNormalization(),
             layers.Conv2D(
                 256,
@@ -71,6 +98,15 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             # Eighth input size conv layer (output shape: 4, 4, 1024)
             # layers.Dropout(0.3),
+            layers.BatchNormalization(),
+            layers.Conv2D(
+                512,
+                kernel_size=5,
+                strides=1,
+                padding="same",
+                activation="relu",
+                kernel_initializer=init,
+            ),
             layers.BatchNormalization(),
             layers.Conv2D(
                 512,
