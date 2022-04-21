@@ -192,7 +192,7 @@ def log_normal_pdf(sample, mean, logvar, raxis=1):
     )
 
 
-def compute_loss(model, x):
+def compute_loss(model, x, clip_limit: float = 5e4):
     mean, logvar = model.encode(x)
     z = model.reparameterize(mean, logvar)
     x_logit = model.decode(z)
@@ -200,7 +200,9 @@ def compute_loss(model, x):
     logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
     logpz = log_normal_pdf(z, 0.0, 0.0)
     logqz_x = log_normal_pdf(z, mean, logvar)
-    return -tf.reduce_mean(logpx_z + logpz - logqz_x)
+    loss = -tf.reduce_mean(logpx_z + logpz - logqz_x)
+    print(loss)
+    return min(loss, clip_limit)
 
 
 @tf.function
