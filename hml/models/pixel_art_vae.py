@@ -491,6 +491,7 @@ def generate(
     decoder_input: Optional[str] = None,
     latent_dim: int = 50,
     save_output: bool = False,
+    sample: bool = True,
 ) -> None:
     """
     Generate some pixel art
@@ -504,13 +505,17 @@ def generate(
     if decoder_input is not None:
         input_raw = tf.io.read_file(decoder_input)
         input_decoded = tf.image.decode_image(input_raw)
-        latent_input = tf.reshape(input_decoded, [1, latent_dim])
+        latent_input = tf.reshape(input_decoded, [10, latent_dim])
     else:
-        latent_input = tf.random.normal([1, latent_dim])
+        latent_input = tf.random.normal([10, latent_dim])
     i = 0
     while True:
+        if sample:
+            output = autoencoder.sample(latent_input)
+        else:
+            output = autoencoder.decoder_(latent_input, training=False)
         generated_rgb_image = np.array(
-            (autoencoder.sample(latent_input)[0, :, :, :] * 255.0)
+            (output[0, :, :, :] * 255.0)
         ).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.close("all")
@@ -523,7 +528,7 @@ def generate(
             i += 1
         else:
             plt.show()
-        latent_input = tf.random.normal([1, latent_dim])
+        latent_input = tf.random.normal([10, latent_dim])
 
 
 def regenerate_images(slider_value: Optional[float] = None) -> None:
@@ -631,6 +636,7 @@ def main(
     decoder_input: Optional[str] = None,
     save_generator_output: bool = False,
     debug: bool = False,
+    sample: bool = True,
 ) -> None:
     """
     Main routine.
@@ -714,6 +720,7 @@ def main(
             decoder_input=decoder_input,
             latent_dim=latent_dim,
             save_output=save_generator_output,
+            sample=sample,
         )
     elif mode == "view-latent-space":
         view_latent_space(generator=autoencoder.decoder_)
@@ -767,6 +774,12 @@ def get_args() -> argparse.Namespace:
         default=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
     )
     parser.add_argument(
+        "--no-sample",
+        "-n",
+        action="store_true",
+        help="Directly feed noise to decoder instead of running sample",
+    )
+    parser.add_argument(
         "--save-output",
         "-s",
         action="store_true",
@@ -806,6 +819,7 @@ def cli_main(args: argparse.Namespace) -> int:
         continue_from_checkpoint=args.checkpoint,
         decoder_input=args.generator_input,
         save_generator_output=args.save_output,
+        sample=not args.no_sample
     )
     return 0
 
