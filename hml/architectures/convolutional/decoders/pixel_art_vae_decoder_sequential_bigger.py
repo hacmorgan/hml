@@ -18,7 +18,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             layers.Reshape((8, 8, 1024)),
             # Output shape: (8, 8, 1024)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 512,
@@ -29,7 +29,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (16, 16, 512)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 512,
@@ -40,7 +40,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (16, 16, 512)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 256,
@@ -51,7 +51,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (32, 32, 256)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 256,
@@ -62,7 +62,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (32, 32, 256)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 128,
@@ -73,7 +73,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (64, 64, 128)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 128,
@@ -84,7 +84,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (64, 64, 128)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 64,
@@ -95,7 +95,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (128, 128, 64)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 64,

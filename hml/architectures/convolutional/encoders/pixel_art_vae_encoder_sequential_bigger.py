@@ -20,7 +20,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (128, 128, 64)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2D(
                 128,
@@ -31,7 +31,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (64, 64, 128)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2D(
                 128,
@@ -42,7 +42,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (64, 64, 128)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2D(
                 256,
@@ -53,7 +53,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (32, 32, 256)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2D(
                 256,
@@ -64,7 +64,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (32, 32, 256)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2D(
                 512,
@@ -75,7 +75,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (16, 16, 512)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2D(
                 512,
@@ -86,7 +86,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Output shape: (8, 8, 1024)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Conv2D(
                 1024,
@@ -97,7 +97,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             # Latent output (No activation)
-            layers.Dropout(0.2),
+            # layers.Dropout(0.2),
             layers.BatchNormalization(),
             layers.Flatten(),
             layers.Dense(2 * latent_dim, kernel_initializer=init),
