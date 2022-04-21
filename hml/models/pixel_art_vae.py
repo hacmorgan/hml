@@ -325,7 +325,7 @@ def train(
         stanford_dogs_ds["train"]
         .map(
             lambda row: tf.image.resize(
-                tf.image.convert_image_dtype(row["image"], dtype=tf.float32),
+                tf.image.convert_image_dtype(row["image"], dtype=tf.float32) / 255.0,
                 (128, 128),
                 method="nearest",
             )
@@ -339,7 +339,7 @@ def train(
         stanford_dogs_ds["test"]
         .map(
             lambda row: tf.image.resize(
-                tf.image.convert_image_dtype(row["image"], dtype=tf.float32),
+                tf.image.convert_image_dtype(row["image"], dtype=tf.float32) / 255.0,
                 (128, 128),
                 method="nearest",
             )
