@@ -336,9 +336,16 @@ def train(
     #     .batch(batch_size)
     # )
     stanford_dogs_ds = tfds.load(name="stanford_dogs")
+
+    data_augmentation = tf.keras.Sequential([
+        tf.keras.layers.RandomFlip("horizontal_and_vertical"),
+        tf.keras.layers.RandomRotation(0.2),
+    ])
+
     train_images = (
         stanford_dogs_ds["train"]
         .map(stanford_dogs_preprocess)
+        .map(lambda x: data_augmentation(x, training=True))
         .shuffle(batch_size)
         .batch(batch_size)
         .cache()

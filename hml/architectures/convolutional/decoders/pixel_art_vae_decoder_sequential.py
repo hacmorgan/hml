@@ -52,7 +52,8 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 activation="relu",
                 kernel_initializer=init,
             ),
-            # 4. upscale by fractionally strided conv, (64, 64, 3)
+            # 4. upscale by fractionally strided conv, (64, 64, 64)
+            layers.BatchNormalization(),
             layers.Conv2DTranspose(
                 64,
                 kernel_size=5,
@@ -61,6 +62,17 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 activation="relu",
                 kernel_initializer=init,
             ),
+            # 4. upscale by fractionally strided conv, (128, 128, 32)
+            layers.BatchNormalization(),
+            layers.Conv2DTranspose(
+                32,
+                kernel_size=5,
+                strides=2,
+                padding="same",
+                activation="relu",
+                kernel_initializer=init,
+            ),
+            # Output layer
             layers.Conv2DTranspose(
                 3,
                 kernel_size=5,

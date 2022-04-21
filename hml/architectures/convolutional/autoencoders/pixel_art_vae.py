@@ -26,10 +26,10 @@ class PixelArtVAE(tf.keras.models.Model):
         """
         super().__init__()
         self.latent_dim_ = latent_dim
-        self.encoder_ = pixel_art_vae_encoder_sequential_bigger.model(
+        self.encoder_ = pixel_art_vae_encoder_sequential.model(
             latent_dim=self.latent_dim_
         )
-        self.decoder_ = pixel_art_vae_decoder_sequential_bigger.model(
+        self.decoder_ = pixel_art_vae_decoder_sequential.model(
             latent_dim=self.latent_dim_
         )
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")

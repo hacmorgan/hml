@@ -10,12 +10,22 @@ def model(latent_dim: int) -> tf.keras.Sequential:
     architecture = tf.keras.Sequential(
         [
             # Input
-            layers.InputLayer(input_shape=(64, 64, 3)),
+            layers.InputLayer(input_shape=(128, 128, 3)),
             # Non strided conv
+            layers.Conv2D(
+                32,
+                kernel_size=5,
+                strides=1,
+                padding="same",
+                activation="relu",
+                kernel_initializer=init,
+            ),
+            # Input size conv layer (output shape: 64, 64, 64)
+            layers.BatchNormalization(),
             layers.Conv2D(
                 64,
                 kernel_size=5,
-                strides=1,
+                strides=2,
                 padding="same",
                 activation="relu",
                 kernel_initializer=init,
