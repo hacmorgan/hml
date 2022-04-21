@@ -345,7 +345,7 @@ def train(
     train_images = (
         stanford_dogs_ds["train"]
         .map(stanford_dogs_preprocess)
-        .map(lambda x: data_augmentation(x, training=True))
+        # .map(lambda x: data_augmentation(x, training=True))
         .shuffle(batch_size)
         .batch(batch_size)
         .cache()
@@ -641,7 +641,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 20000,
-    batch_size: int = 64,
+    batch_size: int = 128,
     epochs_per_turn: int = 1,
     latent_dim: int = 500,
     num_examples_to_generate: int = 16,
@@ -677,13 +677,14 @@ def main(
     # STEPS_PER_EPOCH = 350  # with no augmentation
     # STEPS_PER_EPOCH = 215  # eboy with x2 augmentation
     # STEPS_PER_EPOCH = 180  # x2 augmentation, 128x128 crops
-    STEPS_PER_EPOCH = 185  # stanford_dogs
+    # STEPS_PER_EPOCH = 185  # stanford_dogs
+    STEPS_PER_EPOCH = 90  # stanford_dogs, batch size 128
 
     clr = tfa.optimizers.CyclicalLearningRate(
         # initial_learning_rate=8e-5,
         # maximal_learning_rate=5e-4,
         initial_learning_rate=3e-5,
-        maximal_learning_rate=1e-4,
+        maximal_learning_rate=3e-4,
         scale_fn=lambda x: 1 / (1.2 ** (x - 1)),
         # scale_fn=lambda x: 1 / (2.0 ** (x - 1)),
         step_size=3 * STEPS_PER_EPOCH,
