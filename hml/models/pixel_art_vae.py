@@ -124,7 +124,7 @@ def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
     """
     for i in range(predictions.shape[0]):
         plt.subplot(4, 4, i + 1)
-        generated_rgb_image = np.array((predictions[i, :, :, :] * 255)).astype(np.uint8)
+        generated_rgb_image = np.array((predictions[i, :, :, :] * 255.0)).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.imshow(generated_rgb_image)
         plt.axis("off")
@@ -176,6 +176,7 @@ def show_reproduction_quality(
     """
     reproductions = autoencoder.call(test_images, training=False)
     print(f"{np.mean(reproductions)=}, {np.std(reproductions)=}")
+    print(f"{np.mean(test_images)=}, {np.std(test_images)=}")
     output_path = os.path.join(
         reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
     )
@@ -202,7 +203,7 @@ def compute_loss(model, x, clip_limit: float = 5e4):
     logqz_x = log_normal_pdf(z, mean, logvar)
     loss = -tf.reduce_mean(logpx_z + logpz - logqz_x)
     print(loss)
-    return min(loss, clip_limit)
+    return tf.math.minimum(loss, clip_limit)
 
 
 @tf.function
@@ -249,6 +250,18 @@ def compute_losses(
     train_loss = mse(train_images, reproduced_train_images)
     val_loss = mse(val_images, reproduced_val_images)
     return train_loss, val_loss
+
+
+def stanford_dogs_preprocess(row: List[tf.Tensor]) -> tf.Tensor:
+    """
+    Preprocess a row from the stanford dogs dataset into the desired format.
+    """
+    floating_point_image = tf.image.convert_image_dtype(row["image"], dtype=tf.float32)
+    return tf.image.resize(
+                floating_point_image,
+                (128, 128),
+                method="nearest",
+            )
 
 
 def train(
@@ -325,13 +338,7 @@ def train(
     stanford_dogs_ds = tfds.load(name="stanford_dogs")
     train_images = (
         stanford_dogs_ds["train"]
-        .map(
-            lambda row: tf.image.resize(
-                tf.image.convert_image_dtype(row["image"], dtype=tf.float32) / 255.0,
-                (128, 128),
-                method="nearest",
-            )
-        )
+        .map(stanford_dogs_preprocess)
         .shuffle(batch_size)
         .batch(batch_size)
         .cache()
@@ -339,13 +346,7 @@ def train(
     )
     val_images = (
         stanford_dogs_ds["test"]
-        .map(
-            lambda row: tf.image.resize(
-                tf.image.convert_image_dtype(row["image"], dtype=tf.float32) / 255.0,
-                (128, 128),
-                method="nearest",
-            )
-        )
+        .map(stanford_dogs_preprocess)
         .shuffle(batch_size)
         .batch(batch_size)
         .cache()
@@ -355,6 +356,7 @@ def train(
     # Save a few images for visualisation
     train_test_image_batch = next(iter(train_images))
     train_test_images = train_test_image_batch[:8, ...]
+    print(train_test_images[0])
     val_test_image_batch = next(iter(val_images))
     val_test_images = val_test_image_batch[:8, ...]
     # train_test_images = train_images.take(8)
@@ -412,6 +414,8 @@ def train(
                         loss=loss_metric.result(),
                     )
                 )
+
+            # loss_metric.reset_states()
 
         # Produce demo output every epoch the generator trains
         generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
@@ -553,7 +557,7 @@ def regenerate_images(slider_value: Optional[float] = None) -> None:
         latent_input = tf.random.normal([1, 100])
     # breakpoint()
     generated_output = np.array(
-        generator_(latent_input, training=False)[0, :, :, :] * 127.5 + 127.5
+        generator_(latent_input, training=False)[0, :, :, :] * 255.0
     ).astype(int)
     print(generated_output.shape)
     print(latent_input.shape)
@@ -632,7 +636,7 @@ def main(
     buffer_size: int = 20000,
     batch_size: int = 64,
     epochs_per_turn: int = 1,
-    latent_dim: int = 200,
+    latent_dim: int = 400,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,

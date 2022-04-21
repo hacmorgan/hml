@@ -50,7 +50,7 @@ class PixelArtVAE(tf.keras.models.Model):
     def sample(self, eps=None):
         if eps is None:
             eps = tf.random.normal(shape=(100, self.latent_dim_))
-        return self.decode(eps, apply_sigmoid=True)
+        return self.decode(eps, apply_activation=True)
 
     def encode(self, x):
         mean, logvar = tf.split(self.encoder_(x), num_or_size_splits=2, axis=1)
@@ -60,9 +60,9 @@ class PixelArtVAE(tf.keras.models.Model):
         eps = tf.random.normal(shape=mean.shape)
         return eps * tf.exp(logvar * 0.5) + mean
 
-    def decode(self, z, apply_sigmoid=False):
+    def decode(self, z, apply_activation=False):
         logits = self.decoder_(z)
-        if apply_sigmoid:
+        if apply_activation:
             probs = tf.sigmoid(logits)
             return probs
         return logits
