@@ -33,6 +33,7 @@ import PIL.Image
 # import PIL.ImageTk
 import tensorflow as tf
 import tensorflow_addons as tfa
+import tensorflow_datasets as tfds
 import tensorflow_gan as tfgan
 
 
@@ -299,25 +300,54 @@ def train(
         write_commit_hash_to_model_dir(model_dir)
 
     # Instantiate train and val datasets
+    # train_images = (
+    #     tf.data.Dataset.from_generator(
+    #         PixelArtSigmoidDataset(
+    #             dataset_path=dataset_path, crop_shape=train_crop_shape
+    #         ),
+    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+    #     )
+    #     .shuffle(buffer_size)
+    #     .batch(batch_size)
+    #     .cache()
+    #     .prefetch(tf.data.AUTOTUNE)
+    # )
+    # val_images = (
+    #     tf.data.Dataset.from_generator(
+    #         PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
+    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+    #     )
+    #     .shuffle(buffer_size)
+    #     .batch(batch_size)
+    # )
+    stanford_dogs_ds = tfds.load(name="stanford_dogs")
     train_images = (
-        tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(
-                dataset_path=dataset_path, crop_shape=train_crop_shape
-            ),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        stanford_dogs_ds["train"]
+        .map(
+            lambda row: tf.image.resize(
+                tf.image.convert_image_dtype(row["image"], dtype=tf.float32),
+                (128, 128),
+                method="nearest",
+            )
         )
-        .shuffle(buffer_size)
+        .shuffle(batch_size)
         .batch(batch_size)
         .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
     val_images = (
-        tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        stanford_dogs_ds["test"]
+        .map(
+            lambda row: tf.image.resize(
+                tf.image.convert_image_dtype(row["image"], dtype=tf.float32),
+                (128, 128),
+                method="nearest",
+            )
         )
-        .shuffle(buffer_size)
+        .shuffle(batch_size)
         .batch(batch_size)
+        .cache()
+        .prefetch(tf.data.AUTOTUNE)
     )
 
     # Save a few images for visualisation
@@ -325,6 +355,8 @@ def train(
     train_test_images = train_test_image_batch[:8, ...]
     val_test_image_batch = next(iter(val_images))
     val_test_images = val_test_image_batch[:8, ...]
+    # train_test_images = train_images.take(8)
+    # val_test_images = val_images.take(8)
 
     # Make progress dir and reproductions dir for outputs
     os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
@@ -625,13 +657,14 @@ def main(
     # STEPS_PER_EPOCH = 705  # with x2 augmentation
     # STEPS_PER_EPOCH = 350  # with no augmentation
     # STEPS_PER_EPOCH = 215  # eboy with x2 augmentation
-    STEPS_PER_EPOCH = 180  # x2 augmentation, 128x128 crops
+    # STEPS_PER_EPOCH = 180  # x2 augmentation, 128x128 crops
+    STEPS_PER_EPOCH = 185  # stanford_dogs
 
     clr = tfa.optimizers.CyclicalLearningRate(
         # initial_learning_rate=1e-4,
         # maximal_learning_rate=1e-3,
-        initial_learning_rate=8e-5,
-        maximal_learning_rate=5e-4,
+        initial_learning_rate=1e-4,
+        maximal_learning_rate=8e-4,
         scale_fn=lambda x: 1 / (1.2 ** (x - 1)),
         # scale_fn=lambda x: 1 / (2.0 ** (x - 1)),
         step_size=3 * STEPS_PER_EPOCH,

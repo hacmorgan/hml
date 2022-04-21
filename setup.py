@@ -31,6 +31,7 @@ setup(
         "pycairo",
         "tensorflow",
         "tensorflow_addons",
+        "tensorflow_datasets",
         "tensorflow_gan",
         "tensorflow_io",
     ],
