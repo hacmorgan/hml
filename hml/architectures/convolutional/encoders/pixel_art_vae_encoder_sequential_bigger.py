@@ -32,15 +32,15 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             # Output shape: (64, 64, 128)
             # layers.Dropout(0.2),
-            layers.BatchNormalization(),
-            layers.Conv2D(
-                128,
-                kernel_size=5,
-                strides=1,
-                padding="same",
-                activation="relu",
-                kernel_initializer=init,
-            ),
+            # layers.BatchNormalization(),
+            # layers.Conv2D(
+            #     128,
+            #     kernel_size=5,
+            #     strides=1,
+            #     padding="same",
+            #     activation="relu",
+            #     kernel_initializer=init,
+            # ),
             # Output shape: (64, 64, 128)
             # layers.Dropout(0.2),
             layers.BatchNormalization(),
@@ -54,15 +54,15 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             # Output shape: (32, 32, 256)
             # layers.Dropout(0.2),
-            layers.BatchNormalization(),
-            layers.Conv2D(
-                256,
-                kernel_size=5,
-                strides=1,
-                padding="same",
-                activation="relu",
-                kernel_initializer=init,
-            ),
+            # layers.BatchNormalization(),
+            # layers.Conv2D(
+            #     256,
+            #     kernel_size=5,
+            #     strides=1,
+            #     padding="same",
+            #     activation="relu",
+            #     kernel_initializer=init,
+            # ),
             # Output shape: (32, 32, 256)
             # layers.Dropout(0.2),
             layers.BatchNormalization(),
@@ -76,15 +76,15 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             # Output shape: (16, 16, 512)
             # layers.Dropout(0.2),
-            layers.BatchNormalization(),
-            layers.Conv2D(
-                512,
-                kernel_size=5,
-                strides=1,
-                padding="same",
-                activation="relu",
-                kernel_initializer=init,
-            ),
+            # layers.BatchNormalization(),
+            # layers.Conv2D(
+            #     512,
+            #     kernel_size=5,
+            #     strides=1,
+            #     padding="same",
+            #     activation="relu",
+            #     kernel_initializer=init,
+            # ),
             # Output shape: (8, 8, 1024)
             # layers.Dropout(0.2),
             layers.BatchNormalization(),
