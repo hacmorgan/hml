@@ -22,6 +22,7 @@ setup(
         "hml/models/pixel_art.py",
         "hml/models/pixel_art_ae.py",
         "hml/models/pixel_art_vae.py",
+        "hml/models/pixel_art_avae.py",
     ],
     install_requires=[
         "GitPython",
