@@ -449,8 +449,8 @@ def train(
         with summary_writer.as_default():
             tf.summary.scalar(
                 "learning rate",
-                # optimizer.learning_rate,
-                optimizer.learning_rate(epoch * step),
+                optimizer.learning_rate,
+                # optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
             tf.summary.histogram(
