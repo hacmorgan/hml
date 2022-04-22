@@ -193,7 +193,7 @@ def log_normal_pdf(sample, mean, logvar, raxis=1):
     )
 
 
-def compute_vae_loss(vae, discriminator, x, beta: float = 1e3, clip_limit: float = 5e4):
+def compute_vae_loss(vae, discriminator, x, beta: float = 1e1, clip_limit: float = 5e4):
     # Reconstruct image
     mean, logvar = vae.encode(x)
     z = vae.reparameterize(mean, logvar)
