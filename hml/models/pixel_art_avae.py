@@ -710,7 +710,7 @@ def main(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
+    train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
     buffer_size: int = 20000,
     batch_size: int = 128,
     epochs_per_turn: int = 1,
