@@ -38,6 +38,7 @@ import tensorflow_gan as tfgan
 from hml.architectures.convolutional.autoencoders.avae import AVAE
 from hml.architectures.convolutional.discriminators import avae_discriminator
 from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
+from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
 
 
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
@@ -348,34 +349,31 @@ def train(
         write_commit_hash_to_model_dir(model_dir)
 
     # Instantiate train and val datasets
-    train_images = (
-        tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(
-                dataset_path=dataset_path, crop_shape=train_crop_shape
-            ),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-        )
-        .shuffle(buffer_size)
-        .batch(batch_size)
-        .cache()
-        .prefetch(tf.data.AUTOTUNE)
-    )
-    val_images = (
-        tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-        )
-        .shuffle(buffer_size)
-        .batch(batch_size)
-    )
+
+    # # Pixel Art dataset
+    # train_images = (
+    #     tf.data.Dataset.from_generator(
+    #         PixelArtSigmoidDataset(
+    #             dataset_path=dataset_path, crop_shape=train_crop_shape
+    #         ),
+    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+    #     )
+    #     .shuffle(buffer_size)
+    #     .batch(batch_size)
+    #     .cache()
+    #     .prefetch(tf.data.AUTOTUNE)
+    # )
+    # val_images = (
+    #     tf.data.Dataset.from_generator(
+    #         PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
+    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+    #     )
+    #     .shuffle(buffer_size)
+    #     .batch(batch_size)
+    # )
+
+    # # Stanford dogs dataset
     # dataset = tfds.load(name="stanford_dogs")
-    # # dataset = tfds.load(name="celeb_a")
-
-    # data_augmentation = tf.keras.Sequential([
-    #     tf.keras.layers.RandomFlip("horizontal_and_vertical"),
-    #     tf.keras.layers.RandomRotation(0.2),
-    # ])
-
     # train_images = (
     #     dataset["train"]
     #     .map(stanford_dogs_preprocess)
@@ -393,6 +391,30 @@ def train(
     #     .cache()
     #     .prefetch(tf.data.AUTOTUNE)
     # )
+
+    # Cats and dogs dataset
+    train_images = (
+        tf.data.Dataset.from_generator(
+            ResizeDataset(
+                dataset_path=dataset_path, output_shape=train_crop_shape
+            ),
+            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        )
+        .shuffle(buffer_size)
+        .batch(batch_size)
+        .cache()
+        .prefetch(tf.data.AUTOTUNE)
+    )
+    val_images = (
+         tf.data.Dataset.from_generator(
+            ResizeDataset(
+                dataset_path=val_path, output_shape=train_crop_shape
+            ),
+            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        )
+        .shuffle(buffer_size)
+        .batch(batch_size)
+    )
 
     # Save a few images for visualisation
     train_test_image_batch = next(iter(train_images))
