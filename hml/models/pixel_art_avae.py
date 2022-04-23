@@ -194,7 +194,7 @@ def log_normal_pdf(sample, mean, logvar, raxis=1):
     )
 
 
-def compute_vae_loss(vae, discriminator, x, beta: float = 1e1, clip_limit: float = 5e4):
+def compute_vae_loss(vae, discriminator, x, beta: float = 1e2, clip_limit: float = 5e4):
     # Reconstruct image
     mean, logvar = vae.encode(x)
     z = vae.reparameterize(mean, logvar)
@@ -734,9 +734,9 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
     buffer_size: int = 20000,
-    batch_size: int = 128,
+    batch_size: int = 64,
     epochs_per_turn: int = 1,
-    latent_dim: int = 200,
+    latent_dim: int = 512,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
