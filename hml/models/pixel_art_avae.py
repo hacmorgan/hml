@@ -529,26 +529,26 @@ def train(
                 "encoder output train", encoder_output_train, step=epoch
             )
             tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
-            # tf.summary.scalar(
-            #     "encoder output train: mean",
-            #     np.mean(encoder_output_train.numpy()),
-            #     step=epoch,
-            # )
-            # tf.summary.scalar(
-            #     "encoder output train: stddev",
-            #     np.std(encoder_output_train.numpy()),
-            #     step=epoch,
-            # )
-            # tf.summary.scalar(
-            #     "encoder output val: mean",
-            #     np.mean(encoder_output_val.numpy()),
-            #     step=epoch,
-            # )
-            # tf.summary.scalar(
-            #     "encoder output val: stddev",
-            #     np.std(encoder_output_val.numpy()),
-            #     step=epoch,
-            # )
+            tf.summary.scalar(
+                "encoder output train: mean",
+                np.mean(encoder_output_train.numpy()),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "encoder output train: stddev",
+                np.std(encoder_output_train.numpy()),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "encoder output val: mean",
+                np.mean(encoder_output_val.numpy()),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "encoder output val: stddev",
+                np.std(encoder_output_val.numpy()),
+                step=epoch,
+            )
             tf.summary.scalar("VAE loss metric", vae_loss_metric.result(), step=epoch)
             tf.summary.scalar("discriminator loss metric", discriminator_loss_metric.result(), step=epoch)
             # tf.summary.scalar("kl loss metric", kl_loss_metric.result(), step=epoch)
