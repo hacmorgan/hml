@@ -156,7 +156,7 @@ def generate_and_save_images(
     epoch: int,
     test_input: tf.Tensor,
     progress_dir: str,
-) -> None:
+) -> tf.Tensor:
     """
     Generate and save images
     """
@@ -166,6 +166,7 @@ def generate_and_save_images(
     #     target=generate_save_image, args=(predictions, output_path)
     # ).start()
     generate_save_image(predictions, output_path)
+    return predictions
 
 
 def show_reproduction_quality(
@@ -173,7 +174,7 @@ def show_reproduction_quality(
     epoch: int,
     test_images: tf.Tensor,
     reproductions_dir: str,
-) -> None:
+) -> tf.Tensor:
     """
     Generate and save images
     """
@@ -187,6 +188,7 @@ def show_reproduction_quality(
     #     target=reproduce_save_image, args=(test_images, reproductions, output_path)
     # ).start()
     reproduce_save_image(test_images, reproductions, output_path)
+    return reproductions
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
@@ -624,13 +626,13 @@ def train(
             # loss_metric.reset_states()
 
         # Produce demo output every epoch the generator trains
-        generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
+        generated = generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
 
         # Show some examples of how the model reconstructs its inputs.
-        show_reproduction_quality(
+        train_reconstructed = show_reproduction_quality(
             autoencoder, epoch + 1, train_test_images, reproductions_dir
         )
-        show_reproduction_quality(
+        val_reconstructed = show_reproduction_quality(
             autoencoder, epoch + 1, val_test_images, val_reproductions_dir
         )
 
@@ -645,7 +647,9 @@ def train(
         z_mean, z_log_var = autoencoder.encode(val_test_image_batch)
         encoder_output_val = autoencoder.reparameterize(z_mean, z_log_var)
 
+        # Write to logs
         with summary_writer.as_default():
+            # Learning rates
             tf.summary.scalar(
                 "VAE learning rate",
                 autoencoder_optimizer.learning_rate,
@@ -658,6 +662,8 @@ def train(
                 # optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
+
+            # Encoder outputs
             tf.summary.histogram(
                 "encoder output train", encoder_output_train, step=epoch
             )
@@ -682,17 +688,41 @@ def train(
                 np.std(encoder_output_val.numpy()),
                 step=epoch,
             )
+
+            # Losses
             tf.summary.scalar("VAE loss metric", vae_loss_metric.result(), step=epoch)
+            tf.summary.scalar("KL loss metric", kl_loss_metric.result(), step=epoch)
+            tf.summary.scalar("Discrimination generation loss metric", discrimination_generation_loss_metric.result(), step=epoch)
+            tf.summary.scalar("Discrimination reconstruction loss metric", discrimination_reconstruction_loss_metric.result(), step=epoch)
             tf.summary.scalar(
                 "discriminator loss metric",
                 discriminator_loss_metric.result(),
                 step=epoch,
             )
-            # tf.summary.scalar("kl loss metric", kl_loss_metric.result(), step=epoch)
-            # tf.summary.scalar("reconstruction loss metric", reconstruction_loss_metric.result(), step=epoch)
+            tf.summary.scalar(
+                "discriminator real loss metric",
+                discriminator_real_loss_metric.result(),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "discriminator reconstructed loss metric",
+                discriminator_reconstructed_loss_metric.result(),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "discriminator generated loss metric",
+                discriminator_generated_loss_metric.result(),
+                step=epoch,
+            )
+
+            # MSE reconstruction losses
             tf.summary.scalar("MSE train loss", train_loss, step=epoch)
             tf.summary.scalar("MSE validation loss", val_loss, step=epoch)
-            # tf.summary.image("", step=epoch)
+
+            # Example outputs
+            tf.summary.image("reconstructed train images", train_reconstructed, step=epoch)
+            tf.summary.image("reconstructed val images", val_reconstructed, step=epoch)
+            tf.summary.image("generated images", generated, step=epoch)
 
         # Save the model every 15 epochs
         if (epoch + 1) % 15 == 0:
