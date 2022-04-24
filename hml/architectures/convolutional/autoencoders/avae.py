@@ -1,12 +1,8 @@
 import tensorflow as tf
 from tensorflow.keras import layers
 
-from hml.architectures.convolutional.decoders import (
-    avae_decoder
-)
-from hml.architectures.convolutional.encoders import (
-    avae_encoder
-)
+from hml.architectures.convolutional.decoders import avae_decoder
+from hml.architectures.convolutional.encoders import avae_encoder
 from hml.architectures.convolutional.discriminators import avae_discriminator
 
 
@@ -21,18 +17,16 @@ class AVAE(tf.keras.models.Model):
         """
         super().__init__()
         self.latent_dim_ = latent_dim
-        self.encoder_ = avae_encoder.model(
-            latent_dim=self.latent_dim_
-        )
-        self.decoder_ = avae_decoder.model(
-            latent_dim=self.latent_dim_
-        )
+        self.encoder_ = avae_encoder.model(latent_dim=self.latent_dim_)
+        self.decoder_ = avae_decoder.model(latent_dim=self.latent_dim_)
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
         self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
             name="reconstruction_loss"
         )
         self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
-        self.discriminator_loss_tracker = tf.keras.metrics.Mean(name="discriminator_loss")
+        self.discriminator_loss_tracker = tf.keras.metrics.Mean(
+            name="discriminator_loss"
+        )
 
     def call(self, input_image: tf.Tensor, training: bool = True) -> tf.Tensor:
         """

@@ -51,9 +51,20 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             layers.ReLU(),
             # Output shape: (32, 32, 128)
             layers.Conv2DTranspose(
-                3,
+                64,
                 kernel_size=5,
                 strides=2,
+                padding="same",
+                activation="relu",
+                kernel_initializer=init,
+            ),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            # Output shape: (64, 64, 64)
+            layers.Conv2DTranspose(
+                3,
+                kernel_size=5,
+                strides=1,
                 padding="same",
                 kernel_initializer=init,
             ),

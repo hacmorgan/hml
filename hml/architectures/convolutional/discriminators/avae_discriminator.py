@@ -19,7 +19,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             layers.BatchNormalization(),
-            layers.LeakyReLU(),
+            layers.LeakyReLU(alpha=0.2),
             # Output shape: (32, 32, 128)
             layers.Conv2D(
                 256,
@@ -29,7 +29,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             layers.BatchNormalization(),
-            layers.LeakyReLU(),
+            layers.LeakyReLU(alpha=0.2),
             # Output shape: (16, 16, 256)
             layers.Conv2D(
                 512,
@@ -39,7 +39,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             layers.BatchNormalization(),
-            layers.LeakyReLU(),
+            layers.LeakyReLU(alpha=0.2),
             # Output shape: (8, 8, 512)
             layers.Conv2D(
                 1024,
@@ -50,7 +50,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             layers.BatchNormalization(),
-            layers.LeakyReLU(),
+            layers.LeakyReLU(alpha=0.2),
             # Output shape: (4, 4, 1024)
             layers.Flatten(),
             layers.Dense(1),
