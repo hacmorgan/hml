@@ -415,7 +415,13 @@ def stanford_dogs_preprocess(row: List[tf.Tensor]) -> tf.Tensor:
     )
 
 
-def learning_rate_schedule(step: int, max_lr: float = 1e-4, min_lr: float = 1e-5, start_decay_epoch: int = 100, stop_decay_epoch: int = 500) -> float:
+def learning_rate_schedule(
+    step: int,
+    max_lr: float = 1e-4,
+    min_lr: float = 1e-5,
+    start_decay_epoch: int = 100,
+    stop_decay_epoch: int = 500,
+) -> float:
     """
     Compute LR for a given step
 
@@ -434,7 +440,7 @@ def learning_rate_schedule(step: int, max_lr: float = 1e-4, min_lr: float = 1e-5
         return max_lr
     if step > stop_decay_epoch * STEPS_PER_EPOCH:
         return min_lr
-    return max_lr - (max_lr - min_lr)/(step - start_decay_epoch * STEPS_PER_EPOCH)
+    return max_lr - (max_lr - min_lr) / (step - start_decay_epoch * STEPS_PER_EPOCH)
 
 
 def train(
@@ -718,8 +724,16 @@ def train(
             # Losses
             tf.summary.scalar("VAE loss metric", vae_loss_metric.result(), step=epoch)
             tf.summary.scalar("KL loss metric", kl_loss_metric.result(), step=epoch)
-            tf.summary.scalar("Discrimination generation loss metric", discrimination_generation_loss_metric.result(), step=epoch)
-            tf.summary.scalar("Discrimination reconstruction loss metric", discrimination_reconstruction_loss_metric.result(), step=epoch)
+            tf.summary.scalar(
+                "Discrimination generation loss metric",
+                discrimination_generation_loss_metric.result(),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "Discrimination reconstruction loss metric",
+                discrimination_reconstruction_loss_metric.result(),
+                step=epoch,
+            )
             tf.summary.scalar(
                 "discriminator loss metric",
                 discriminator_loss_metric.result(),
@@ -746,7 +760,9 @@ def train(
             tf.summary.scalar("MSE validation loss", val_loss, step=epoch)
 
             # Example outputs
-            tf.summary.image("reconstructed train images", train_reconstructed, step=epoch)
+            tf.summary.image(
+                "reconstructed train images", train_reconstructed, step=epoch
+            )
             tf.summary.image("reconstructed val images", val_reconstructed, step=epoch)
             tf.summary.image("generated images", generated, step=epoch)
 
@@ -964,9 +980,11 @@ def main(
     """
     STEPS_PER_EPOCH = 390  # Cats
     lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
-        boundaries=[STEPS_PER_EPOCH * epoch for epoch in (300, 600)], values=[1e-4, 3e-5, 1e-5], name=None
+        boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 400)],
+        values=[1e-4, 3e-5, 1e-5],
+        name=None,
     )
-    
+
     autoencoder = AVAE(latent_dim=latent_dim)
     discriminator = avae_discriminator.model(latent_dim=latent_dim)
     autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
