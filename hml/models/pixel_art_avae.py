@@ -678,14 +678,14 @@ def train(
             # Learning rates
             tf.summary.scalar(
                 "VAE learning rate",
-                autoencoder_optimizer.learning_rate,
-                # optimizer.learning_rate(epoch * step),
+                # autoencoder_optimizer.learning_rate,
+                optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
             tf.summary.scalar(
                 "discriminator learning rate",
-                discriminator_optimizer.learning_rate,
-                # optimizer.learning_rate(epoch * step),
+                # discriminator_optimizer.learning_rate,
+                optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
 
