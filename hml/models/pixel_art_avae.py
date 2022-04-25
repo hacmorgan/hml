@@ -202,8 +202,8 @@ def compute_vae_loss(
     vae: tf.keras.models.Model,
     discriminator: tf.keras.Sequential,
     x: tf.Tensor,
-    beta: float = 1e3,
-    gamma: float = 1e3,
+    beta: float = 1e2,
+    gamma: float = 1e2,
     clip_limit: float = 1e5,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
@@ -258,7 +258,7 @@ def compute_vae_loss(
         + gamma * discrimination_generation_loss
     )
     return (
-        tf.math.minimum(loss, clip_limit),
+        loss,
         reconstructed,
         generated,
         vae_loss,
