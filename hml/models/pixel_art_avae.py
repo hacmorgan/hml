@@ -204,18 +204,16 @@ def compute_vae_loss(
     x: tf.Tensor,
     beta: float = 1e2,
     gamma: float = 1e2,
-    clip_limit: float = 1e5,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
 
     Args:
-        vae: The vae model - should have encode(), decode(), reparameterize(), and sample() methods
+        vae: VAE model - should have encode(), decode(), reparameterize(), and sample() methods
         discriminator: The discriminator model
         x: Minibatch of training images
         beta: Contribution of discriminator loss on reconstructed images to total loss
         gamma: Contribution of discriminator loss on generated images to total loss
-        clip_limit: Upper bound on loss (for numerical stability)
 
     Returns:
         Total loss
@@ -252,6 +250,7 @@ def compute_vae_loss(
     fake_output = discriminator(generated)
     discrimination_generation_loss = bce(tf.ones_like(fake_output), fake_output)
 
+    # Compute total loss and return
     loss = (
         vae_loss
         + beta * discrimination_reconstruction_loss
@@ -272,8 +271,8 @@ def compute_discriminator_loss(
     x: tf.Tensor,
     reconstructed: tf.Tensor,
     generated: tf.Tensor,
-    beta: float = 1e1,
-    gamma: float = 1e1,
+    beta: float = 1e0,
+    gamma: float = 1e0,
 ) -> Tuple[float, float, float, float]:
     """
     Compute loss for training discriminator network
@@ -980,8 +979,8 @@ def main(
     """
     STEPS_PER_EPOCH = 390  # Cats
     lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
-        boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 400)],
-        values=[1e-4, 3e-5, 1e-5],
+        boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
+        values=[1e-4, 7e-5, 3e-5],
         name=None,
     )
 

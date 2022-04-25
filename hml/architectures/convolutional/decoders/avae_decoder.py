@@ -63,7 +63,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             # Output shape: (64, 64, 64)
             layers.Conv2DTranspose(
                 3,
-                kernel_size=5,
+                kernel_size=1,
                 strides=1,
                 padding="same",
                 kernel_initializer=init,
