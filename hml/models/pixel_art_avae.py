@@ -202,8 +202,8 @@ def compute_vae_loss(
     vae: tf.keras.models.Model,
     discriminator: tf.keras.Sequential,
     x: tf.Tensor,
-    beta: float = 1e2,
-    gamma: float = 1e2,
+    beta: float = 5e1,
+    gamma: float = 5e1,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
