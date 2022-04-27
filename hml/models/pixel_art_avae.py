@@ -1052,6 +1052,9 @@ def main(
     # Restore model from checkpoint
     if continue_from_checkpoint is not None:
         checkpoint.restore(continue_from_checkpoint)
+        lr.start_decay_epoch_ = 0
+        autoencoder_optimizer.learning_rate = lr
+        discriminator_optimizer.learning_rate = lr
 
     if mode == "train":
         train(
