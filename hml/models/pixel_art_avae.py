@@ -595,7 +595,6 @@ def train(
     # Save a few images for visualisation
     train_test_image_batch = next(iter(train_images))
     train_test_images = train_test_image_batch[:8, ...]
-    print(train_test_images[0])
     val_test_image_batch = next(iter(val_images))
     val_test_images = val_test_image_batch[:8, ...]
 
@@ -1034,8 +1033,8 @@ def main(
     discriminator = avae_discriminator.model(latent_dim=latent_dim)
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
-    autoencoder_optimizer = tf.keras.optimizers.AdamW(weight_decay=lr, learning_rate=lr)
-    discriminator_optimizer = tf.keras.optimizers.Adam(weight_decay=lr, learning_rate=lr)
+    autoencoder_optimizer = tfa.optimizers.AdamW(weight_decay=1e-4, learning_rate=lr)
+    discriminator_optimizer = tfa.optimizers.AdamW(weight_decay=1e-4, learning_rate=lr)
     # optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
     # optimizer = tfa.optimizers.AdamW(
