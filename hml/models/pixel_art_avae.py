@@ -414,32 +414,64 @@ def stanford_dogs_preprocess(row: List[tf.Tensor]) -> tf.Tensor:
     )
 
 
-def learning_rate_schedule(
-    step: int,
-    max_lr: float = 1e-4,
-    min_lr: float = 1e-5,
-    start_decay_epoch: int = 100,
-    stop_decay_epoch: int = 500,
-) -> float:
+class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
     """
-    Compute LR for a given step
+    A custom learning rate schedule
 
-    Args:
-        step: Which training step we are up to
-        max_lr: Initial value of lr
-        min_lr: Final value of lr
-        start_decay_epoch: Stay at max_lr until this many epochs have passed, then start decaying
-        stop_decay_epoch: Reach min_lr after this many epochs have passed, and stop decaying
+    Currently a piecewise defined function that is initially static at the maximum
+    learning rate, then ramps down until it reaches the minimum learning rate, where it
+    stays.
 
-    Returns:
-        Learning rate for this step
+    i.e. it looks something like this:
+    _____
+         \
+          \
+           \
+            \_____
     """
-    STEPS_PER_EPOCH = 390  # Cats dataset
-    if step < start_decay_epoch * STEPS_PER_EPOCH:
-        return max_lr
-    if step > stop_decay_epoch * STEPS_PER_EPOCH:
-        return min_lr
-    return max_lr - (max_lr - min_lr) / (step - start_decay_epoch * STEPS_PER_EPOCH)
+
+    def __init__(
+        self,
+        max_lr: float = 1e-4,
+        min_lr: float = 5e-6,
+        start_decay_epoch: int = 100,
+        stop_decay_epoch: int = 800,
+        steps_per_epoch: int = 390,  # Cats dataset
+    ) -> "LRS":
+        """
+        Initialize learning rate schedule
+
+        Args:
+            step: Which training step we are up to
+            max_lr: Initial value of lr
+            min_lr: Final value of lr
+            start_decay_epoch: Stay at max_lr until this many epochs have passed, then start decaying
+            stop_decay_epoch: Reach min_lr after this many epochs have passed, and stop decaying
+
+        Returns:
+            Learning rate schedule object
+        """
+        self.max_lr_ = 1e-4
+        self.min_lr_ = 5e-6
+        self.start_decay_epoch_ = 100
+        self.stop_decay_epoch_ = 800
+        self.steps_per_epoch_ = 390
+
+    def __call__(self, step: int) -> float:
+        """
+        Compute the learning rate for the given step
+
+        Args:
+            step: Which training step we are up to
+
+        Returns:
+            Learning rate for this step
+        """
+        if step < self.start_decay_epoch_ * self.steps_per_epoch_:
+            return self.max_lr_
+        if step > self.stop_decay_epoch_ * self.steps_per_epoch_:
+            return self.min_lr_
+        return self.max_lr_ - (self.max_lr_ - self.min_lr_) / (step - self.start_decay_epoch_ * self.steps_per_epoch_)
 
 
 def train(
@@ -699,6 +731,7 @@ def train(
                 "encoder output train", encoder_output_train, step=epoch
             )
             tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
+            tf.summary.histogram("random normal noise", tf.random.normal(shape=[num_examples_to_generate, latent_dim]), step=epoch)
             tf.summary.scalar(
                 "encoder output train: mean",
                 np.mean(encoder_output_train.numpy()),
@@ -978,10 +1011,17 @@ def main(
         save_generator_output: Save generated images instead of displaying
     """
     STEPS_PER_EPOCH = 390  # Cats
-    lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
-        boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
-        values=[1e-4, 7e-5, 3e-5],
-        name=None,
+    # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
+    #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
+    #     values=[1e-4, 7e-5, 3e-5],
+    #     name=None,
+    # )
+    lr = LRS(
+        max_lr=1e-4,
+        min_lr=5e-6,
+        start_decay_epoch=100,
+        stop_decay_epoch=800,
+        steps_per_epoch=STEPS_PER_EPOCH
     )
 
     autoencoder = AVAE(latent_dim=latent_dim)
