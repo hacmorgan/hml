@@ -1019,7 +1019,7 @@ def main(
     lr = LRS(
         max_lr=1e-4,
         min_lr=5e-6,
-        start_decay_epoch=100,
+        start_decay_epoch=30,
         stop_decay_epoch=800,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
