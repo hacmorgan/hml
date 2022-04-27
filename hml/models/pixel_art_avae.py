@@ -427,7 +427,7 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
         self,
         max_lr: float = 1e-4,
         min_lr: float = 5e-6,
-        start_decay_epoch: int = 100,
+        start_decay_epoch: int = 30,
         stop_decay_epoch: int = 800,
         steps_per_epoch: int = 390,  # Cats dataset
     ) -> "LRS":
@@ -444,11 +444,11 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
         Returns:
             Learning rate schedule object
         """
-        self.max_lr_ = 1e-4
-        self.min_lr_ = 5e-6
-        self.start_decay_epoch_ = 100
-        self.stop_decay_epoch_ = 800
-        self.steps_per_epoch_ = 390
+        self.max_lr_ = max_lr
+        self.min_lr_ = min_lr
+        self.start_decay_epoch_ = start_decay_epoch
+        self.stop_decay_epoch_ = stop_decay_epoch
+        self.steps_per_epoch_ = steps_per_epoch
 
     @tf.function
     def __call__(self, step: tf.Tensor) -> float:
@@ -461,11 +461,17 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
         Returns:
             Learning rate for this step
         """
+        # Initial flat LR period, before ramping down
         if step < self.start_decay_epoch_ * self.steps_per_epoch_:
             return self.max_lr_
+
+        # Final flat LR period, after ramping down
         if step > self.stop_decay_epoch_ * self.steps_per_epoch_:
             return self.min_lr_
-        return self.max_lr_ - (self.max_lr_ - self.min_lr_) / (
+
+        # Ramping period
+        gradient = -(self.max_lr_ - self.min_lr_) / ((self.stop_decay_epoch_ - self.start_decay_epoch_) * self.steps_per_epoch_)
+        return self.max_lr_ + gradient * (
             step - self.start_decay_epoch_ * self.steps_per_epoch_
         )
 
