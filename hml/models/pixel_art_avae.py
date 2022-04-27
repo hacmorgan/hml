@@ -195,7 +195,7 @@ def compute_vae_loss(
     vae: tf.keras.models.Model,
     discriminator: tf.keras.Sequential,
     x: tf.Tensor,
-    beta: float = 5e1,
+    beta: float = 0e1,
     gamma: float = 5e1,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
@@ -264,7 +264,7 @@ def compute_discriminator_loss(
     x: tf.Tensor,
     reconstructed: tf.Tensor,
     generated: tf.Tensor,
-    beta: float = 1e0,
+    beta: float = 0e0,
     gamma: float = 1e0,
 ) -> Tuple[float, float, float, float]:
     """
@@ -1032,8 +1032,10 @@ def main(
 
     autoencoder = AVAE(latent_dim=latent_dim)
     discriminator = avae_discriminator.model(latent_dim=latent_dim)
-    autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
-    discriminator_optimizer = tf.keras.optimizers.Adam(lr)
+    # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
+    # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
+    autoencoder_optimizer = tf.keras.optimizers.AdamW(weight_decay=lr, learning_rate=lr)
+    discriminator_optimizer = tf.keras.optimizers.Adam(weight_decay=lr, learning_rate=lr)
     # optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
     # optimizer = tfa.optimizers.AdamW(
@@ -1052,9 +1054,6 @@ def main(
     # Restore model from checkpoint
     if continue_from_checkpoint is not None:
         checkpoint.restore(continue_from_checkpoint)
-        lr.start_decay_epoch_ = 0
-        autoencoder_optimizer.learning_rate = lr
-        discriminator_optimizer.learning_rate = lr
 
     if mode == "train":
         train(
