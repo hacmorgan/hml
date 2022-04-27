@@ -51,13 +51,6 @@ VAE loss: {vae_loss}
 Discriminator loss: {discriminator_loss}
 """
 
-# # Still TBD whether config is worth it
-# DEFAULT_CONFIG = {
-#     "train_ds": "/mnt/storage/ml/data/pixel-art/train",
-#     "val_ds": "/mnt/storage/ml/data/pixel-art/val",
-#     "model_name": datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
-# }
-
 
 # This method returns a helper function to compute mean squared error loss
 mse = tf.keras.losses.MeanSquaredError()
@@ -457,7 +450,8 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
         self.stop_decay_epoch_ = 800
         self.steps_per_epoch_ = 390
 
-    def __call__(self, step: int) -> float:
+    @tf.function
+    def __call__(self, step: tf.Tensor) -> float:
         """
         Compute the learning rate for the given step
 
@@ -471,7 +465,9 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
             return self.max_lr_
         if step > self.stop_decay_epoch_ * self.steps_per_epoch_:
             return self.min_lr_
-        return self.max_lr_ - (self.max_lr_ - self.min_lr_) / (step - self.start_decay_epoch_ * self.steps_per_epoch_)
+        return self.max_lr_ - (self.max_lr_ - self.min_lr_) / (
+            step - self.start_decay_epoch_ * self.steps_per_epoch_
+        )
 
 
 def train(
@@ -731,7 +727,11 @@ def train(
                 "encoder output train", encoder_output_train, step=epoch
             )
             tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
-            tf.summary.histogram("random normal noise", tf.random.normal(shape=[num_examples_to_generate, latent_dim]), step=epoch)
+            tf.summary.histogram(
+                "random normal noise",
+                tf.random.normal(shape=[num_examples_to_generate, latent_dim]),
+                step=epoch,
+            )
             tf.summary.scalar(
                 "encoder output train: mean",
                 np.mean(encoder_output_train.numpy()),
@@ -1021,7 +1021,7 @@ def main(
         min_lr=5e-6,
         start_decay_epoch=100,
         stop_decay_epoch=800,
-        steps_per_epoch=STEPS_PER_EPOCH
+        steps_per_epoch=STEPS_PER_EPOCH,
     )
 
     autoencoder = AVAE(latent_dim=latent_dim)
