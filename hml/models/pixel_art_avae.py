@@ -195,6 +195,7 @@ def compute_vae_loss(
     vae: tf.keras.models.Model,
     discriminator: tf.keras.Sequential,
     x: tf.Tensor,
+    alpha: float = 0e1,
     beta: float = 0e1,
     gamma: float = 5e1,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
@@ -202,19 +203,21 @@ def compute_vae_loss(
     Compute loss for training VAE
 
     Args:
-        vae: VAE model - should have encode(), decode(), reparameterize(), and sample() methods
+        vae: VAE model - should have encode(), decode(), reparameterize(), and sample()
+             methods
         discriminator: The discriminator model
         x: Minibatch of training images
+        alpha: Contribution of KL divergence loss to total loss
         beta: Contribution of discriminator loss on reconstructed images to total loss
         gamma: Contribution of discriminator loss on generated images to total loss
 
     Returns:
         Total loss
-        Reconstructed images (used again to compute loss for training discriminator)
-        Generated images (used again to compute loss for training discriminator)
         VAE (KL divergence) component of loss
         Discrimination loss on reconstructed images
         Discrimination loss on generated images
+        Reconstructed images (used again to compute loss for training discriminator)
+        Generated images (used again to compute loss for training discriminator)
     """
     # Reconstruct a real image
     mean, logvar = vae.encode(x)
@@ -245,17 +248,17 @@ def compute_vae_loss(
 
     # Compute total loss and return
     loss = (
-        vae_loss
+        alpha * vae_loss
         + beta * discrimination_reconstruction_loss
         + gamma * discrimination_generation_loss
     )
     return (
         loss,
-        reconstructed,
-        generated,
         vae_loss,
         discrimination_reconstruction_loss,
         discrimination_generation_loss,
+        reconstructed,
+        generated,
     )
 
 
@@ -329,11 +332,11 @@ def train_step(
     with tf.GradientTape() as vae_tape, tf.GradientTape() as disc_tape:
         (
             vae_loss,
-            reconstructed_images,
-            generated_images,
             kl_loss,
             discrimination_reconstruction_loss,
             discrimination_generation_loss,
+            reconstructed_images,
+            generated_images,
         ) = compute_vae_loss(autoencoder, discriminator, images)
         (
             discriminator_loss,
@@ -835,6 +838,7 @@ def train(
 
         # Reset metrics every epoch
         vae_loss_metric.reset_states()
+        kl_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
         discrimination_reconstruction_loss_metric.reset_states()
         discrimination_generation_loss_metric.reset_states()
