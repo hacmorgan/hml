@@ -197,7 +197,7 @@ def compute_vae_loss(
     x: tf.Tensor,
     alpha: float = 0e1,
     beta: float = 0e1,
-    gamma: float = 5e1,
+    gamma: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
