@@ -195,7 +195,7 @@ def compute_vae_loss(
     vae: tf.keras.models.Model,
     discriminator: tf.keras.Sequential,
     x: tf.Tensor,
-    alpha: float = 1e-3,
+    alpha: float = 3e-3,
     beta: float = 1e0,
     gamma: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
