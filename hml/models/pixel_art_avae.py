@@ -1037,8 +1037,8 @@ def main(
     discriminator = avae_discriminator.model(latent_dim=latent_dim)
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
-    autoencoder_optimizer = tfa.optimizers.AdamW(weight_decay=1e-5, learning_rate=lr)
-    discriminator_optimizer = tfa.optimizers.AdamW(weight_decay=1e-5, learning_rate=lr)
+    autoencoder_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
+    discriminator_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
     # optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
     # optimizer = tfa.optimizers.AdamW(
