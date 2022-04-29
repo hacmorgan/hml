@@ -209,7 +209,7 @@ def variance_of_laplacian(images: tf.Tensor) -> float:
         Variance of the laplacian of images.
     """
     gray_images = tf.image.rgb_to_grayscale(images)
-    laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=5)
+    laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=7)
     return tf.math.reduce_variance(laplacian)
 
 
