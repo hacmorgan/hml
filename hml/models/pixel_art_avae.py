@@ -661,7 +661,7 @@ def train(
     # Set starting and end epoch according to whether we are continuing training
     epoch_log_file = os.path.join(model_dir, "epoch_log")
     if continue_from_checkpoint is not None:
-        epoch_start = int(
+        epoch_start = 15 * int(
             continue_from_checkpoint.strip()[continue_from_checkpoint.rfind("-") + 1 :]
         )
         # with open(epoch_log_file, "r", encoding="utf-8") as epoch_log:
