@@ -31,6 +31,7 @@ import PIL.Image
 # import PIL.ImageTk
 import tensorflow as tf
 import tensorflow_addons as tfa
+import tensorflow_io as tfio
 import tensorflow_datasets as tfds
 import tensorflow_gan as tfgan
 
@@ -48,8 +49,10 @@ Epoch: {epoch}
 Step: {step}
 Time: {epoch_time}
 VAE loss: {vae_loss}
-Discriminator loss: {discriminator_loss}
+KL loss: {kl_loss}
+Generation sharpness loss: {generation_sharpness_loss}
 """
+# Discriminator loss: {discriminator_loss}
 
 
 # This method returns a helper function to compute mean squared error loss
@@ -191,13 +194,32 @@ def log_normal_pdf(sample, mean, logvar, raxis=1):
     )
 
 
+def variance_of_laplacian(images: tf.Tensor) -> float:
+    """
+    Compute the variance of the Laplacian (2nd derivative) of an images, as a measure of
+    images sharpness.
+
+    This can be used to provide a loss contribution that maximizes images sharpness.
+
+    Args:
+        images: Mini-batch of images as 4D tensor
+
+    Returns:
+        Variance of the laplacian of images.
+    """
+    gray_images = tf.image.rgb_to_grayscale(images)
+    laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=5)
+    return tf.math.reduce_variance(laplacian)
+
+
 def compute_vae_loss(
     vae: tf.keras.models.Model,
-    discriminator: tf.keras.Sequential,
+    # discriminator: tf.keras.Sequential,
     x: tf.Tensor,
-    alpha: float = 3e-2,
+    alpha: float = 1e-3,
     beta: float = 0e0,
-    gamma: float = 1e0,
+    gamma: float = 0e0,
+    delta: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
@@ -210,12 +232,14 @@ def compute_vae_loss(
         alpha: Contribution of KL divergence loss to total loss
         beta: Contribution of discriminator loss on reconstructed images to total loss
         gamma: Contribution of discriminator loss on generated images to total loss
+        gamma: Contribution of image sharpness loss on generated images to total loss
 
     Returns:
         Total loss
         VAE (KL divergence) component of loss
         Discrimination loss on reconstructed images
         Discrimination loss on generated images
+        Image sharpness loss on generated images
         Reconstructed images (used again to compute loss for training discriminator)
         Generated images (used again to compute loss for training discriminator)
     """
@@ -234,34 +258,34 @@ def compute_vae_loss(
     logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
     logpz = log_normal_pdf(z, 0.0, 0.0)
     logqz_x = log_normal_pdf(z, mean, logvar)
-    vae_loss = -tf.reduce_mean(logpx_z + logpz - logqz_x)
+    kl_loss = -tf.reduce_mean(logpx_z + logpz - logqz_x)
 
-    # Loss from discriminator output on reconstructed image
-    reconstruction_output = discriminator(reconstructed)
-    discrimination_reconstruction_loss = bce(
-        tf.ones_like(reconstruction_output), reconstruction_output
-    )
+    # # Loss from discriminator output on reconstructed image
+    # reconstruction_output = discriminator(reconstructed)
+    # discrimination_reconstruction_loss = bce(
+    #     tf.ones_like(reconstruction_output), reconstruction_output
+    # )
 
-    # Loss from discriminator output on generated image
-    fake_output = discriminator(generated)
-    discrimination_generation_loss = bce(tf.ones_like(fake_output), fake_output)
+    # # Loss from discriminator output on generated image
+    # fake_output = discriminator(generated)
+    # discrimination_generation_loss = bce(tf.ones_like(fake_output), fake_output)
 
-    # # Sharpness loss
-    # sharpness_loss = 1.0 / variance_of_laplacian(generated)
+    # Sharpness loss
+    sharpness_loss = 1.0 / variance_of_laplacian(generated)
 
     # Compute total loss and return
     loss = (
-        alpha * vae_loss
-        + beta * discrimination_reconstruction_loss
-        + gamma * discrimination_generation_loss
-        # + delta * sharpness_loss
+        alpha * kl_loss
+        # + beta * discrimination_reconstruction_loss
+        # + gamma * discrimination_generation_loss
+        + delta * sharpness_loss
     )
     return (
         loss,
-        vae_loss,
-        discrimination_reconstruction_loss,
-        discrimination_generation_loss,
-        # sharpness_loss,
+        kl_loss,
+        # discrimination_reconstruction_loss,
+        # discrimination_generation_loss,
+        sharpness_loss,
         reconstructed,
         generated,
     )
@@ -311,9 +335,9 @@ def compute_discriminator_loss(
 def train_step(
     images,
     autoencoder: tf.keras.models.Model,
-    discriminator: tf.keras.models.Model,
+    # discriminator: tf.keras.models.Model,
     autoencoder_optimizer: "Optimizer",
-    discriminator_optimizer: "Optimizer",
+    # discriminator_optimizer: "Optimizer",
     loss_metrics: Dict[str, "Metrics"],
     should_train_vae: bool,
     should_train_discriminator: bool,
@@ -338,51 +362,57 @@ def train_step(
         (
             vae_loss,
             kl_loss,
-            discrimination_reconstruction_loss,
-            discrimination_generation_loss,
+            # discrimination_reconstruction_loss,
+            # discrimination_generation_loss,
+            generation_sharpness_loss,
             reconstructed_images,
             generated_images,
-        ) = compute_vae_loss(autoencoder, discriminator, images)
-        (
-            discriminator_loss,
-            discriminator_real_loss,
-            discriminator_reconstructed_loss,
-            discriminator_generated_loss,
-        ) = compute_discriminator_loss(
-            discriminator, images, reconstructed_images, generated_images
+        ) = compute_vae_loss(
+            autoencoder,
+            # discriminator,
+            images
         )
+        # (
+        #     discriminator_loss,
+        #     discriminator_real_loss,
+        #     discriminator_reconstructed_loss,
+        #     discriminator_generated_loss,
+        # ) = compute_discriminator_loss(
+        #     discriminator, images, reconstructed_images, generated_images
+        # )
 
     # Compute gradients from losses
     vae_gradients = vae_tape.gradient(vae_loss, autoencoder.trainable_variables)
-    discriminator_gradients = disc_tape.gradient(
-        discriminator_loss, discriminator.trainable_variables
-    )
+    # discriminator_gradients = disc_tape.gradient(
+    #     discriminator_loss, discriminator.trainable_variables
+    # )
 
     # Update weights if desired
     if should_train_vae:
         autoencoder_optimizer.apply_gradients(
             zip(vae_gradients, autoencoder.trainable_variables)
         )
-    if should_train_discriminator:
-        discriminator_optimizer.apply_gradients(
-            zip(discriminator_gradients, discriminator.trainable_variables)
-        )
+    # if should_train_discriminator:
+    #     discriminator_optimizer.apply_gradients(
+    #         zip(discriminator_gradients, discriminator.trainable_variables)
+    #     )
 
     # Log losses to their respective metrics
     loss_metrics["vae_loss_metric"](vae_loss)
     loss_metrics["kl_loss_metric"](kl_loss)
-    loss_metrics["discrimination_reconstruction_loss_metric"](
-        discrimination_reconstruction_loss
-    )
-    loss_metrics["discrimination_generation_loss_metric"](
-        discrimination_generation_loss
-    )
-    loss_metrics["discriminator_loss_metric"](discriminator_loss)
-    loss_metrics["discriminator_real_loss_metric"](discriminator_real_loss)
-    loss_metrics["discriminator_reconstructed_loss_metric"](
-        discriminator_reconstructed_loss
-    )
-    loss_metrics["discriminator_generated_loss_metric"](discriminator_generated_loss)
+    loss_metrics["generation_sharpness_loss_metric"](generation_sharpness_loss)
+    # loss_metrics["discrimination_reconstruction_loss_metric"](
+    #     discrimination_reconstruction_loss
+    # )
+    # loss_metrics["discrimination_generation_loss_metric"](
+    #     discrimination_generation_loss
+    # )
+    # loss_metrics["discriminator_loss_metric"](discriminator_loss)
+    # loss_metrics["discriminator_real_loss_metric"](discriminator_real_loss)
+    # loss_metrics["discriminator_reconstructed_loss_metric"](
+    #     discriminator_reconstructed_loss
+    # )
+    # loss_metrics["discriminator_generated_loss_metric"](discriminator_generated_loss)
 
 
 def compute_mse_losses(
@@ -478,7 +508,9 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
             return self.min_lr_
 
         # Ramping period
-        gradient = -(self.max_lr_ - self.min_lr_) / ((self.stop_decay_epoch_ - self.start_decay_epoch_) * self.steps_per_epoch_)
+        gradient = -(self.max_lr_ - self.min_lr_) / (
+            (self.stop_decay_epoch_ - self.start_decay_epoch_) * self.steps_per_epoch_
+        )
         return self.max_lr_ + gradient * (
             step - self.start_decay_epoch_ * self.steps_per_epoch_
         )
@@ -486,9 +518,9 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 def train(
     autoencoder: tf.keras.models.Model,
-    discriminator: tf.keras.models.Model,
+    # discriminator: tf.keras.models.Model,
     autoencoder_optimizer: "Optimizer",
-    discriminator_optimizer: "Optimizer",
+    # discriminator_optimizer: "Optimizer",
     model_dir: str,
     checkpoint: tf.train.Checkpoint,
     checkpoint_prefix: str,
@@ -619,8 +651,11 @@ def train(
     # Set starting and end epoch according to whether we are continuing training
     epoch_log_file = os.path.join(model_dir, "epoch_log")
     if continue_from_checkpoint is not None:
-        with open(epoch_log_file, "r", encoding="utf-8") as epoch_log:
-            epoch_start = int(epoch_log.read().strip()) + 1
+        epoch_start = int(
+            continue_from_checkpoint.strip()[continue_from_checkpoint.rfind("-") + 1 :]
+        )
+        # with open(epoch_log_file, "r", encoding="utf-8") as epoch_log:
+        #     epoch_start = int(epoch_log.read().strip()) + 1
     else:
         epoch_start = 0
     epoch_stop = epoch_start + epochs
@@ -628,24 +663,27 @@ def train(
     # Define metrics
     vae_loss_metric = tf.keras.metrics.Mean("vae_loss", dtype=tf.float32)
     kl_loss_metric = tf.keras.metrics.Mean("kl_loss", dtype=tf.float32)
-    discrimination_reconstruction_loss_metric = tf.keras.metrics.Mean(
-        "discrimination_reconstruction_loss", dtype=tf.float32
+    generation_sharpness_loss_metric = tf.keras.metrics.Mean(
+        "generation_sharpness_loss", dtype=tf.float32
     )
-    discrimination_generation_loss_metric = tf.keras.metrics.Mean(
-        "discrimination_generation_loss", dtype=tf.float32
-    )
-    discriminator_loss_metric = tf.keras.metrics.Mean(
-        "discriminator_loss", dtype=tf.float32
-    )
-    discriminator_real_loss_metric = tf.keras.metrics.Mean(
-        "discriminator_real_loss", dtype=tf.float32
-    )
-    discriminator_reconstructed_loss_metric = tf.keras.metrics.Mean(
-        "discriminator_reconstructed_loss", dtype=tf.float32
-    )
-    discriminator_generated_loss_metric = tf.keras.metrics.Mean(
-        "discriminator_generated_loss", dtype=tf.float32
-    )
+    # discrimination_reconstruction_loss_metric = tf.keras.metrics.Mean(
+    #     "discrimination_reconstruction_loss", dtype=tf.float32
+    # )
+    # discrimination_generation_loss_metric = tf.keras.metrics.Mean(
+    #     "discrimination_generation_loss", dtype=tf.float32
+    # )
+    # discriminator_loss_metric = tf.keras.metrics.Mean(
+    #     "discriminator_loss", dtype=tf.float32
+    # )
+    # discriminator_real_loss_metric = tf.keras.metrics.Mean(
+    #     "discriminator_real_loss", dtype=tf.float32
+    # )
+    # discriminator_reconstructed_loss_metric = tf.keras.metrics.Mean(
+    #     "discriminator_reconstructed_loss", dtype=tf.float32
+    # )
+    # discriminator_generated_loss_metric = tf.keras.metrics.Mean(
+    #     "discriminator_generated_loss", dtype=tf.float32
+    # )
 
     # Set up logs
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -667,18 +705,19 @@ def train(
             train_step(
                 images=image_batch,
                 autoencoder=autoencoder,
-                discriminator=discriminator,
+                # discriminator=discriminator,
                 autoencoder_optimizer=autoencoder_optimizer,
-                discriminator_optimizer=discriminator_optimizer,
+                # discriminator_optimizer=discriminator_optimizer,
                 loss_metrics={
                     "vae_loss_metric": vae_loss_metric,
                     "kl_loss_metric": kl_loss_metric,
-                    "discrimination_reconstruction_loss_metric": discrimination_reconstruction_loss_metric,
-                    "discrimination_generation_loss_metric": discrimination_generation_loss_metric,
-                    "discriminator_loss_metric": discriminator_loss_metric,
-                    "discriminator_real_loss_metric": discriminator_real_loss_metric,
-                    "discriminator_reconstructed_loss_metric": discriminator_reconstructed_loss_metric,
-                    "discriminator_generated_loss_metric": discriminator_generated_loss_metric,
+                    "generation_sharpness_loss_metric": generation_sharpness_loss_metric,
+                    # "discrimination_reconstruction_loss_metric": discrimination_reconstruction_loss_metric,
+                    # "discrimination_generation_loss_metric": discrimination_generation_loss_metric,
+                    # "discriminator_loss_metric": discriminator_loss_metric,
+                    # "discriminator_real_loss_metric": discriminator_real_loss_metric,
+                    # "discriminator_reconstructed_loss_metric": discriminator_reconstructed_loss_metric,
+                    # "discriminator_generated_loss_metric": discriminator_generated_loss_metric,
                 },
                 should_train_vae=should_train_vae,
                 should_train_discriminator=should_train_discriminator,
@@ -691,7 +730,9 @@ def train(
                         step=step,
                         epoch_time=time.time() - start,
                         vae_loss=vae_loss_metric.result(),
-                        discriminator_loss=discriminator_loss_metric.result(),
+                        kl_loss=kl_loss_metric.result(),
+                        generation_sharpness_loss=generation_sharpness_loss_metric.result(),
+                        # discriminator_loss=discriminator_loss_metric.result(),
                     )
                 )
 
@@ -728,12 +769,12 @@ def train(
                 autoencoder_optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
-            tf.summary.scalar(
-                "discriminator learning rate",
-                # discriminator_optimizer.learning_rate,
-                discriminator_optimizer.learning_rate(epoch * step),
-                step=epoch,
-            )
+            # tf.summary.scalar(
+            #     "discriminator learning rate",
+            #     # discriminator_optimizer.learning_rate,
+            #     discriminator_optimizer.learning_rate(epoch * step),
+            #     step=epoch,
+            # )
 
             # Encoder outputs
             tf.summary.histogram(
@@ -770,35 +811,40 @@ def train(
             tf.summary.scalar("VAE loss metric", vae_loss_metric.result(), step=epoch)
             tf.summary.scalar("KL loss metric", kl_loss_metric.result(), step=epoch)
             tf.summary.scalar(
-                "Discrimination generation loss metric",
-                discrimination_generation_loss_metric.result(),
+                "Generation sharpness loss metric",
+                generation_sharpness_loss_metric.result(),
                 step=epoch,
             )
-            tf.summary.scalar(
-                "Discrimination reconstruction loss metric",
-                discrimination_reconstruction_loss_metric.result(),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "discriminator loss metric",
-                discriminator_loss_metric.result(),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "discriminator real loss metric",
-                discriminator_real_loss_metric.result(),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "discriminator reconstructed loss metric",
-                discriminator_reconstructed_loss_metric.result(),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "discriminator generated loss metric",
-                discriminator_generated_loss_metric.result(),
-                step=epoch,
-            )
+            # tf.summary.scalar(
+            #     "Discrimination generation loss metric",
+            #     discrimination_generation_loss_metric.result(),
+            #     step=epoch,
+            # )
+            # tf.summary.scalar(
+            #     "Discrimination reconstruction loss metric",
+            #     discrimination_reconstruction_loss_metric.result(),
+            #     step=epoch,
+            # )
+            # tf.summary.scalar(
+            #     "discriminator loss metric",
+            #     discriminator_loss_metric.result(),
+            #     step=epoch,
+            # )
+            # tf.summary.scalar(
+            #     "discriminator real loss metric",
+            #     discriminator_real_loss_metric.result(),
+            #     step=epoch,
+            # )
+            # tf.summary.scalar(
+            #     "discriminator reconstructed loss metric",
+            #     discriminator_reconstructed_loss_metric.result(),
+            #     step=epoch,
+            # )
+            # tf.summary.scalar(
+            #     "discriminator generated loss metric",
+            #     discriminator_generated_loss_metric.result(),
+            #     step=epoch,
+            # )
 
             # MSE reconstruction losses
             tf.summary.scalar("MSE train loss", train_loss, step=epoch)
@@ -822,35 +868,36 @@ def train(
             with open(epoch_log_file, "w", encoding="utf-8") as epoch_log:
                 epoch_log.write(str(epoch))
 
-        # Switch who trains if appropriate
-        if should_train_discriminator == should_train_vae:
-            should_train_vae = False
-            should_train_discriminator = True
-        # elif (
-        #     should_train_discriminator
-        #     and discriminator_loss_metric.result() > vae_loss_metric.result()
-        # ) or (
-        #     should_train_vae
-        #     and vae_loss_metric.result() > discriminator_loss_metric.result()
-        # ):
-        #     print("Not switching who trains, insufficient progress made")
-        else:
-            should_train_vae = not should_train_vae
-            should_train_discriminator = not should_train_discriminator
-        print(
-            f"Switching who trains: {should_train_vae=}, {should_train_discriminator=}"
-        )
+        # # Switch who trains if appropriate
+        # if should_train_discriminator == should_train_vae:
+        #     should_train_vae = False
+        #     should_train_discriminator = True
+        # # elif (
+        # #     should_train_discriminator
+        # #     and discriminator_loss_metric.result() > vae_loss_metric.result()
+        # # ) or (
+        # #     should_train_vae
+        # #     and vae_loss_metric.result() > discriminator_loss_metric.result()
+        # # ):
+        # #     print("Not switching who trains, insufficient progress made")
+        # else:
+        #     should_train_vae = not should_train_vae
+        #     should_train_discriminator = not should_train_discriminator
+        # print(
+        #     f"Switching who trains: {should_train_vae=}, {should_train_discriminator=}"
+        # )
 
         # Reset metrics every epoch
         vae_loss_metric.reset_states()
         kl_loss_metric.reset_states()
-        discriminator_loss_metric.reset_states()
-        discrimination_reconstruction_loss_metric.reset_states()
-        discrimination_generation_loss_metric.reset_states()
-        discriminator_loss_metric.reset_states()
-        discriminator_real_loss_metric.reset_states()
-        discriminator_reconstructed_loss_metric.reset_states()
-        discriminator_generated_loss_metric.reset_states()
+        generation_sharpness_loss_metric.reset_states()
+        # discriminator_loss_metric.reset_states()
+        # discrimination_reconstruction_loss_metric.reset_states()
+        # discrimination_generation_loss_metric.reset_states()
+        # discriminator_loss_metric.reset_states()
+        # discriminator_real_loss_metric.reset_states()
+        # discriminator_reconstructed_loss_metric.reset_states()
+        # discriminator_generated_loss_metric.reset_states()
 
 
 def generate(
@@ -1039,11 +1086,11 @@ def main(
     )
 
     autoencoder = AVAE(latent_dim=latent_dim)
-    discriminator = avae_discriminator.model(latent_dim=latent_dim)
+    # discriminator = avae_discriminator.model(latent_dim=latent_dim)
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
     autoencoder_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
-    discriminator_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
+    # discriminator_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
     # optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
     # optimizer = tfa.optimizers.AdamW(
@@ -1054,9 +1101,9 @@ def main(
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
     checkpoint = tf.train.Checkpoint(
         autoencoder=autoencoder,
-        discriminator=discriminator,
+        # discriminator=discriminator,
         autoencoder_optimizer=autoencoder_optimizer,
-        discriminator_optimizer=discriminator_optimizer,
+        # discriminator_optimizer=discriminator_optimizer,
     )
 
     # Restore model from checkpoint
@@ -1066,9 +1113,9 @@ def main(
     if mode == "train":
         train(
             autoencoder=autoencoder,
-            discriminator=discriminator,
+            # discriminator=discriminator,
             autoencoder_optimizer=autoencoder_optimizer,
-            discriminator_optimizer=discriminator_optimizer,
+            # discriminator_optimizer=discriminator_optimizer,
             model_dir=model_dir,
             checkpoint=checkpoint,
             checkpoint_prefix=checkpoint_prefix,
