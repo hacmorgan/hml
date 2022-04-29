@@ -209,7 +209,7 @@ def variance_of_laplacian(images: tf.Tensor) -> float:
         Variance of the laplacian of images.
     """
     gray_images = tf.image.rgb_to_grayscale(images)
-    laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=9)
+    laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=5)
     return tf.math.reduce_variance(laplacian)
 
 
@@ -221,7 +221,7 @@ def compute_vae_loss(
     beta: float = 0e0,
     gamma: float = 0e0,
     delta: float = 1e-1,
-    epsilon: float = 1e0,
+    epsilon: float = 3e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
