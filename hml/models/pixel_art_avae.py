@@ -195,8 +195,8 @@ def compute_vae_loss(
     vae: tf.keras.models.Model,
     discriminator: tf.keras.Sequential,
     x: tf.Tensor,
-    alpha: float = 1e-2,
-    beta: float = 1e0,
+    alpha: float = 3e-2,
+    beta: float = 0e0,
     gamma: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
@@ -246,17 +246,22 @@ def compute_vae_loss(
     fake_output = discriminator(generated)
     discrimination_generation_loss = bce(tf.ones_like(fake_output), fake_output)
 
+    # # Sharpness loss
+    # sharpness_loss = 1.0 / variance_of_laplacian(generated)
+
     # Compute total loss and return
     loss = (
         alpha * vae_loss
         + beta * discrimination_reconstruction_loss
         + gamma * discrimination_generation_loss
+        # + delta * sharpness_loss
     )
     return (
         loss,
         vae_loss,
         discrimination_reconstruction_loss,
         discrimination_generation_loss,
+        # sharpness_loss,
         reconstructed,
         generated,
     )
