@@ -51,6 +51,7 @@ Time: {epoch_time}
 VAE loss: {vae_loss}
 KL loss: {kl_loss}
 Generation sharpness loss: {generation_sharpness_loss}
+Reconstruction sharpness loss: {reconstruction_sharpness_loss}
 """
 # Discriminator loss: {discriminator_loss}
 
@@ -208,7 +209,7 @@ def variance_of_laplacian(images: tf.Tensor) -> float:
         Variance of the laplacian of images.
     """
     gray_images = tf.image.rgb_to_grayscale(images)
-    laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=5)
+    laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=9)
     return tf.math.reduce_variance(laplacian)
 
 
@@ -219,7 +220,8 @@ def compute_vae_loss(
     alpha: float = 1e-3,
     beta: float = 0e0,
     gamma: float = 0e0,
-    delta: float = 1e0,
+    delta: float = 1e-1,
+    epsilon: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
@@ -232,7 +234,8 @@ def compute_vae_loss(
         alpha: Contribution of KL divergence loss to total loss
         beta: Contribution of discriminator loss on reconstructed images to total loss
         gamma: Contribution of discriminator loss on generated images to total loss
-        gamma: Contribution of image sharpness loss on generated images to total loss
+        delta: Contribution of image sharpness loss on generated images to total loss
+        epsilon: Contribution of image sharpness loss on reconstructed images to total loss
 
     Returns:
         Total loss
@@ -270,22 +273,27 @@ def compute_vae_loss(
     # fake_output = discriminator(generated)
     # discrimination_generation_loss = bce(tf.ones_like(fake_output), fake_output)
 
-    # Sharpness loss
-    sharpness_loss = 1.0 / variance_of_laplacian(generated)
+    # Sharpness loss on generated images
+    sharpness_loss_generated = 1.0 / variance_of_laplacian(generated)
+
+    # Sharpness loss on generated images
+    sharpness_loss_reconstructed = 1.0 / variance_of_laplacian(reconstructed)
 
     # Compute total loss and return
     loss = (
         alpha * kl_loss
         # + beta * discrimination_reconstruction_loss
         # + gamma * discrimination_generation_loss
-        + delta * sharpness_loss
+        + delta * sharpness_loss_generated
+        + epsilon * sharpness_loss_reconstructed
     )
     return (
         loss,
         kl_loss,
         # discrimination_reconstruction_loss,
         # discrimination_generation_loss,
-        sharpness_loss,
+        sharpness_loss_generated,
+        sharpness_loss_reconstructed,
         reconstructed,
         generated,
     )
@@ -365,6 +373,7 @@ def train_step(
             # discrimination_reconstruction_loss,
             # discrimination_generation_loss,
             generation_sharpness_loss,
+            reconstruction_sharpness_loss,
             reconstructed_images,
             generated_images,
         ) = compute_vae_loss(
@@ -401,6 +410,7 @@ def train_step(
     loss_metrics["vae_loss_metric"](vae_loss)
     loss_metrics["kl_loss_metric"](kl_loss)
     loss_metrics["generation_sharpness_loss_metric"](generation_sharpness_loss)
+    loss_metrics["reconstruction_sharpness_loss_metric"](reconstruction_sharpness_loss)
     # loss_metrics["discrimination_reconstruction_loss_metric"](
     #     discrimination_reconstruction_loss
     # )
@@ -666,6 +676,9 @@ def train(
     generation_sharpness_loss_metric = tf.keras.metrics.Mean(
         "generation_sharpness_loss", dtype=tf.float32
     )
+    reconstruction_sharpness_loss_metric = tf.keras.metrics.Mean(
+        "reconstruction_sharpness_loss", dtype=tf.float32
+    )
     # discrimination_reconstruction_loss_metric = tf.keras.metrics.Mean(
     #     "discrimination_reconstruction_loss", dtype=tf.float32
     # )
@@ -712,6 +725,7 @@ def train(
                     "vae_loss_metric": vae_loss_metric,
                     "kl_loss_metric": kl_loss_metric,
                     "generation_sharpness_loss_metric": generation_sharpness_loss_metric,
+                    "reconstruction_sharpness_loss_metric": reconstruction_sharpness_loss_metric,
                     # "discrimination_reconstruction_loss_metric": discrimination_reconstruction_loss_metric,
                     # "discrimination_generation_loss_metric": discrimination_generation_loss_metric,
                     # "discriminator_loss_metric": discriminator_loss_metric,
@@ -732,6 +746,7 @@ def train(
                         vae_loss=vae_loss_metric.result(),
                         kl_loss=kl_loss_metric.result(),
                         generation_sharpness_loss=generation_sharpness_loss_metric.result(),
+                        reconstruction_sharpness_loss=reconstruction_sharpness_loss_metric.result(),
                         # discriminator_loss=discriminator_loss_metric.result(),
                     )
                 )
@@ -815,6 +830,11 @@ def train(
                 generation_sharpness_loss_metric.result(),
                 step=epoch,
             )
+            tf.summary.scalar(
+                "Reconstruction sharpness loss metric",
+                reconstruction_sharpness_loss_metric.result(),
+                step=epoch,
+            )
             # tf.summary.scalar(
             #     "Discrimination generation loss metric",
             #     discrimination_generation_loss_metric.result(),
@@ -891,6 +911,7 @@ def train(
         vae_loss_metric.reset_states()
         kl_loss_metric.reset_states()
         generation_sharpness_loss_metric.reset_states()
+        reconstruction_sharpness_loss_metric.reset_states()
         # discriminator_loss_metric.reset_states()
         # discrimination_reconstruction_loss_metric.reset_states()
         # discrimination_generation_loss_metric.reset_states()
@@ -1040,9 +1061,9 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
     buffer_size: int = 1000,
-    batch_size: int = 64,
+    batch_size: int = 128,
     epochs_per_turn: int = 1,
-    latent_dim: int = 512,
+    latent_dim: int = 128,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
@@ -1071,7 +1092,8 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    STEPS_PER_EPOCH = 390  # Cats
+    # STEPS_PER_EPOCH = 390  # Cats - minibatch size 64
+    STEPS_PER_EPOCH = 195  # Cats - minibatch size 128
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
     #     values=[1e-4, 7e-5, 3e-5],
