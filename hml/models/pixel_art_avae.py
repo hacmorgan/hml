@@ -218,7 +218,7 @@ def compute_vae_loss(
     vae: tf.keras.models.Model,
     # discriminator: tf.keras.Sequential,
     x: tf.Tensor,
-    alpha: float = 1e-1,
+    alpha: float = 1e0,
     beta: float = 0e0,
     gamma: float = 0e0,
     delta: float = 0e0,
