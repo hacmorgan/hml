@@ -221,7 +221,7 @@ def compute_vae_loss(
     alpha: float = 1e-3,
     beta: float = 0e0,
     gamma: float = 0e0,
-    delta: float = 3e-1,
+    delta: float = 1e0,
     epsilon: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
@@ -275,7 +275,7 @@ def compute_vae_loss(
     # discrimination_generation_loss = bce(tf.ones_like(fake_output), fake_output)
 
     # Sharpness loss on generated images
-    sharpness_loss_generated = 1.0 / variance_of_laplacian(generated)
+    sharpness_loss_generated = -variance_of_laplacian(generated)
 
     # Sharpness loss on generated images
     sharpness_loss_reconstructed = - (
