@@ -122,7 +122,9 @@ def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
     """
     for i in range(predictions.shape[0]):
         plt.subplot(4, 4, i + 1)
-        generated_rgb_image = np.array((predictions[i, :, :, :] * 255.0)).astype(np.uint8)
+        generated_rgb_image = np.array((predictions[i, :, :, :] * 255.0)).astype(
+            np.uint8
+        )
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.imshow(generated_rgb_image)
         plt.axis("off")
@@ -256,10 +258,10 @@ def stanford_dogs_preprocess(row: List[tf.Tensor]) -> tf.Tensor:
     """
     floating_point_image = tf.image.convert_image_dtype(row["image"], dtype=tf.float32)
     return tf.image.resize(
-                floating_point_image,
-                (128, 128),
-                method="nearest",
-            )
+        floating_point_image,
+        (128, 128),
+        method="nearest",
+    )
 
 
 def train(
@@ -336,10 +338,12 @@ def train(
     dataset = tfds.load(name="stanford_dogs")
     # dataset = tfds.load(name="celeb_a")
 
-    data_augmentation = tf.keras.Sequential([
-        tf.keras.layers.RandomFlip("horizontal_and_vertical"),
-        tf.keras.layers.RandomRotation(0.2),
-    ])
+    data_augmentation = tf.keras.Sequential(
+        [
+            tf.keras.layers.RandomFlip("horizontal_and_vertical"),
+            tf.keras.layers.RandomRotation(0.2),
+        ]
+    )
 
     train_images = (
         dataset["train"]
@@ -526,9 +530,7 @@ def generate(
             output = autoencoder.sample(latent_input)
         else:
             output = autoencoder.decoder_(latent_input, training=False)
-        generated_rgb_image = np.array(
-            (output[0, :, :, :] * 255.0)
-        ).astype(np.uint8)
+        generated_rgb_image = np.array((output[0, :, :, :] * 255.0)).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.close("all")
         plt.imshow(generated_rgb_image)
@@ -832,7 +834,7 @@ def cli_main(args: argparse.Namespace) -> int:
         continue_from_checkpoint=args.checkpoint,
         decoder_input=args.generator_input,
         save_generator_output=args.save_output,
-        sample=not args.no_sample
+        sample=not args.no_sample,
     )
     return 0
 

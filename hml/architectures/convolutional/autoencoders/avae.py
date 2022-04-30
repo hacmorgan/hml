@@ -1,38 +1,30 @@
-import tensorflow as tf
-from tensorflow.keras import layers
+from typing import Optional
 
-from hml.architectures.convolutional.decoders import (
-    avae_decoder
-)
-from hml.architectures.convolutional.encoders import (
-    avae_encoder
-)
-from hml.architectures.convolutional.discriminators import avae_discriminator
+import tensorflow as tf
+
+from hml.architectures.convolutional.decoders import avae_decoder
+from hml.architectures.convolutional.encoders import avae_encoder
 
 
 class AVAE(tf.keras.models.Model):
     """
     Autoencoder with architecture based on DCGAN paper
+
+    The adversarial part of this model is handled in hml.models.pixel_art_avae, so this
+    is just a plain VAE
     """
 
-    def __init__(self, latent_dim: int = 10) -> "PixelArtVAE":
+    def __init__(self, latent_dim: int = 100) -> "AVAE":
         """
         Construct the autoencoder
+
+        Args:
+            latent_dim: Dimension of latent distribution (i.e. size of encoder input)
         """
         super().__init__()
         self.latent_dim_ = latent_dim
-        self.encoder_ = avae_encoder.model(
-            latent_dim=self.latent_dim_
-        )
-        self.decoder_ = avae_decoder.model(
-            latent_dim=self.latent_dim_
-        )
-        self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
-        self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
-            name="reconstruction_loss"
-        )
-        self.kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
-        self.discriminator_loss_tracker = tf.keras.metrics.Mean(name="discriminator_loss")
+        self.encoder_ = avae_encoder.model(latent_dim=self.latent_dim_)
+        self.decoder_ = avae_decoder.model(latent_dim=self.latent_dim_)
 
     def call(self, input_image: tf.Tensor, training: bool = True) -> tf.Tensor:
         """
@@ -43,7 +35,13 @@ class AVAE(tf.keras.models.Model):
         return self.sample(z)
 
     @tf.function
-    def sample(self, eps=None):
+    def sample(self, eps: Optional[tf.Tensor] = None):
+        """
+        Run a sample from an input distribution through the decoder to generate an image
+
+        Args:
+            eps: Sample from distribution
+        """
         if eps is None:
             eps = tf.random.normal(shape=(100, self.latent_dim_))
         return self.decode(eps, apply_activation=True)
