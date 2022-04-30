@@ -222,7 +222,7 @@ def compute_vae_loss(
     beta: float = 0e0,
     gamma: float = 0e0,
     delta: float = 3e-1,
-    epsilon: float = 2e0,
+    epsilon: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
@@ -279,7 +279,8 @@ def compute_vae_loss(
 
     # Sharpness loss on generated images
     sharpness_loss_reconstructed = 1.0 / (
-        variance_of_laplacian(reconstructed, ksize=5)
+        variance_of_laplacian(reconstructed, ksize=3)
+        + variance_of_laplacian(reconstructed, ksize=5)
         + variance_of_laplacian(reconstructed, ksize=7)
     )
 
