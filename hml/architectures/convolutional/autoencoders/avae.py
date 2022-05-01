@@ -24,7 +24,7 @@ class AVAE(tf.keras.models.Model):
         super().__init__()
         self.latent_dim_ = latent_dim
         self.encoder_ = avae_encoder_256.model(latent_dim=self.latent_dim_)
-        self.decoder_ = avae_encoder_256.model(latent_dim=self.latent_dim_)
+        self.decoder_ = avae_decoder_256.model(latent_dim=self.latent_dim_)
 
     def call(self, input_image: tf.Tensor, training: bool = True) -> tf.Tensor:
         """

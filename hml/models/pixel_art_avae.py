@@ -32,13 +32,13 @@ import PIL.Image
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow_io as tfio
-import tensorflow_datasets as tfds
-import tensorflow_gan as tfgan
+# import tensorflow_datasets as tfds
+# import tensorflow_gan as tfgan
 
 
 from hml.architectures.convolutional.autoencoders.avae import AVAE
-from hml.architectures.convolutional.discriminators import avae_discriminator
-from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
+# from hml.architectures.convolutional.discriminators import avae_discriminator
+# from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
 from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
 
 
@@ -542,7 +542,7 @@ def train(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
+    train_crop_shape: Tuple[int, int, int] = (256, 256, 3),
     buffer_size: int = 1000,
     batch_size: int = 128,
     epochs_per_turn: int = 1,
@@ -1064,7 +1064,7 @@ def main(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
+    train_crop_shape: Tuple[int, int, int] = (256, 256, 3),
     buffer_size: int = 1000,
     batch_size: int = 128,
     epochs_per_turn: int = 1,
@@ -1195,7 +1195,7 @@ def get_args() -> argparse.Namespace:
         "--dataset",
         "-d",
         type=str,
-        default="/mnt/storage/ml/data/all_animals/train",
+        default="/mnt/storage/ml/data/PetImages/cat_train/",
         help="Path to dataset directory, containing training images",
     )
     parser.add_argument(
@@ -1233,7 +1233,7 @@ def get_args() -> argparse.Namespace:
         "--validation-dataset",
         "-v",
         type=str,
-        default="/mnt/storage/ml/data/all_animals/train",
+        default="/mnt/storage/ml/data/PetImages/cat_val/",
         help="Path to dataset directory, containing images to test with",
     )
     return parser.parse_args()
