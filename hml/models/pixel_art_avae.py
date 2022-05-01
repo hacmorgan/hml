@@ -235,8 +235,8 @@ def compute_vae_loss(
         alpha: Contribution of KL divergence loss to total loss
         beta: Contribution of discriminator loss on reconstructed images to total loss
         gamma: Contribution of discriminator loss on generated images to total loss
-        delta: Contribution of image sharpness loss on generated images to total loss
-        epsilon: Contribution of image sharpness loss on reconstructed images to total loss
+        delta: Contribution of generated image sharpness loss to total loss
+        epsilon: Contribution of reconstructed image sharpness loss to total loss
 
     Returns:
         Total loss
@@ -1106,7 +1106,7 @@ def main(
     # )
     lr = LRS(
         max_lr=1e-4,
-        min_lr=5e-6,
+        min_lr=1e-5,
         start_decay_epoch=30,
         stop_decay_epoch=400,
         steps_per_epoch=STEPS_PER_EPOCH,
