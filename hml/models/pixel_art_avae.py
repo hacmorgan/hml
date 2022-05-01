@@ -1068,7 +1068,7 @@ def main(
     buffer_size: int = 1000,
     batch_size: int = 128,
     epochs_per_turn: int = 1,
-    latent_dim: int = 128,
+    latent_dim: int = 256,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
@@ -1106,9 +1106,9 @@ def main(
     # )
     lr = LRS(
         max_lr=1e-4,
-        min_lr=1e-5,
-        start_decay_epoch=30,
-        stop_decay_epoch=400,
+        min_lr=5e-6,
+        start_decay_epoch=50,
+        stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
 
@@ -1195,7 +1195,7 @@ def get_args() -> argparse.Namespace:
         "--dataset",
         "-d",
         type=str,
-        default="/mnt/storage/ml/data/pixel-art/train",
+        default="/mnt/storage/ml/data/all_animals/train",
         help="Path to dataset directory, containing training images",
     )
     parser.add_argument(
@@ -1233,7 +1233,7 @@ def get_args() -> argparse.Namespace:
         "--validation-dataset",
         "-v",
         type=str,
-        default="/mnt/storage/ml/data/pixel-art/val",
+        default="/mnt/storage/ml/data/all_animals/train",
         help="Path to dataset directory, containing images to test with",
     )
     return parser.parse_args()
