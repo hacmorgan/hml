@@ -1064,7 +1064,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (256, 256, 3),
     buffer_size: int = 1000,
-    batch_size: int = 128,
+    batch_size: int = 32,
     epochs_per_turn: int = 1,
     latent_dim: int = 256,
     num_examples_to_generate: int = 16,
@@ -1095,8 +1095,9 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
+    STEPS_PER_EPOCH = 780  # Cats - minibatch size 32
     # STEPS_PER_EPOCH = 390  # Cats - minibatch size 64
-    STEPS_PER_EPOCH = 195  # Cats - minibatch size 128
+    # STEPS_PER_EPOCH = 195  # Cats - minibatch size 128
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
