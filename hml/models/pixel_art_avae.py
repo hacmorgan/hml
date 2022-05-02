@@ -45,13 +45,11 @@ from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
 
 UPDATE_TEMPLATE = """
-Epoch: {epoch}
-Step: {step}
-Time: {epoch_time}
-VAE loss: {vae_loss}
-KL loss: {kl_loss}
-Generation sharpness loss: {generation_sharpness_loss}
-Reconstruction sharpness loss: {reconstruction_sharpness_loss}
+Epoch: {epoch}    Step: {step}    Time: {epoch_time:.2f}
+KL loss:                       {kl_loss:>6.4f}
+Reconstruction sharpness loss: {reconstruction_sharpness_loss:>6.4f}
+Generation sharpness loss:     {generation_sharpness_loss:>6.4f}
+Total loss:                    {vae_loss:>6.4f}
 """
 # Discriminator loss: {discriminator_loss}
 
@@ -221,8 +219,8 @@ def compute_vae_loss(
     alpha: float = 1e0,
     beta: float = 0e0,
     gamma: float = 0e0,
-    delta: float = 0e0,
-    epsilon: float = 1e0,
+    delta: float = 1e0,
+    epsilon: float = 1e1,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
@@ -1099,18 +1097,25 @@ def main(
     """
     # STEPS_PER_EPOCH = 390  # Cats - minibatch size 64
     STEPS_PER_EPOCH = 195  # Cats - minibatch size 128
+
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
     #     values=[1e-4, 7e-5, 3e-5],
     #     name=None,
     # )
     lr = LRS(
-        max_lr=1e-4,
+        max_lr=3e-4,
         min_lr=5e-6,
-        start_decay_epoch=50,
+        start_decay_epoch=0,
         stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
+    # lr = tfa.optimizers.CyclicalLearningRate(
+    #     initial_learning_rate=1e-5,
+    #     maximal_learning_rate=3e-4,
+    #     scale_fn=lambda x: 1 / (1.1 ** (x - 1)),
+    #     step_size=3 * STEPS_PER_EPOCH,
+    # )
 
     autoencoder = AVAE(latent_dim=latent_dim)
     # discriminator = avae_discriminator.model(latent_dim=latent_dim)
