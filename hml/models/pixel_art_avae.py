@@ -1105,7 +1105,7 @@ def main(
     #     name=None,
     # )
     lr = LRS(
-        max_lr=3e-4,
+        max_lr=1e-4,
         min_lr=5e-6,
         start_decay_epoch=0,
         stop_decay_epoch=1500,
