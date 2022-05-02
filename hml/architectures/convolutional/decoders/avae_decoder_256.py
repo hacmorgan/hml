@@ -12,23 +12,13 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             # Latent input
             layers.InputLayer(input_shape=(latent_dim,)),
             layers.Dense(
-                2 * 2 * 4096,
+                2 * 2 * 2048,
                 kernel_initializer=init,
             ),
-            layers.Reshape((2, 2, 4096)),
+            layers.Reshape((2, 2, 2048)),
             layers.BatchNormalization(),
             layers.ReLU(),
             # Output shape: (2, 2, 4096)
-            layers.Conv2DTranspose(
-                2048,
-                kernel_size=5,
-                strides=2,
-                padding="same",
-                kernel_initializer=init,
-            ),
-            layers.BatchNormalization(),
-            layers.ReLU(),
-            # Output shape: (4, 4, 2048)
             layers.Conv2DTranspose(
                 1024,
                 kernel_size=5,
@@ -38,7 +28,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
-            # Output shape: (8, 8, 1024)
+            # Output shape: (4, 4, 1024)
             layers.Conv2DTranspose(
                 512,
                 kernel_size=5,
@@ -48,7 +38,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
-            # Output shape: (16, 16, 512)
+            # Output shape: (8, 8, 512)
             layers.Conv2DTranspose(
                 256,
                 kernel_size=5,
@@ -58,7 +48,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
-            # Output shape: (32, 32, 256)
+            # Output shape: (16, 16, 256)
             layers.Conv2DTranspose(
                 128,
                 kernel_size=5,
@@ -68,7 +58,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
-            # Output shape: (64, 64, 128)
+            # Output shape: (32, 32, 128)
             layers.Conv2DTranspose(
                 64,
                 kernel_size=5,
@@ -78,7 +68,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
-            # Output shape: (128, 128, 64)
+            # Output shape: (64, 64, 64)
             layers.Conv2DTranspose(
                 32,
                 kernel_size=5,
@@ -88,7 +78,17 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
-            # Output shape: (256, 256, 32)
+            # Output shape: (128, 128, 32)
+            layers.Conv2DTranspose(
+                16,
+                kernel_size=5,
+                strides=2,
+                padding="same",
+                kernel_initializer=init,
+            ),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            # Output shape: (256, 256, 16)
             layers.Conv2DTranspose(
                 3,
                 kernel_size=1,
