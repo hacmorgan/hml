@@ -219,7 +219,7 @@ def compute_vae_loss(
     alpha: float = 1e0,
     beta: float = 0e0,
     gamma: float = 0e0,
-    delta: float = 1e0,
+    delta: float = 0e0,
     epsilon: float = 1e1,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
