@@ -16,9 +16,29 @@ def model(latent_dim: int) -> tf.keras.Sequential:
                 kernel_initializer=init,
             ),
             layers.Reshape((4, 4, 1024)),
-            # Output shape: (4, 4, 1024)
             layers.BatchNormalization(),
             layers.ReLU(),
+            # Output shape: (4, 4, 1024)
+            # layers.Conv2DTranspose(
+            #     1024,
+            #     kernel_size=5,
+            #     strides=2,
+            #     padding="same",
+            #     kernel_initializer=init,
+            # ),
+            # layers.BatchNormalization(),
+            # layers.ReLU(),
+            # # Output shape: (2, 2, 1024)
+            # layers.Conv2DTranspose(
+            #     1024,
+            #     kernel_size=5,
+            #     strides=2,
+            #     padding="same",
+            #     kernel_initializer=init,
+            # ),
+            # layers.BatchNormalization(),
+            # layers.ReLU(),
+            # # Output shape: (4, 4, 1024)
             layers.Conv2DTranspose(
                 512,
                 kernel_size=5,

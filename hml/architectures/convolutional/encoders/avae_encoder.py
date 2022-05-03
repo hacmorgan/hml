@@ -52,6 +52,28 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             layers.BatchNormalization(),
             layers.LeakyReLU(alpha=0.2),
             # Output shape: (4, 4, 1024)
+            # layers.Conv2D(
+            #     1024,
+            #     kernel_size=5,
+            #     strides=2,
+            #     padding="same",
+            #     activation="relu",
+            #     kernel_initializer=init,
+            # ),
+            # layers.BatchNormalization(),
+            # layers.LeakyReLU(alpha=0.2),
+            # # Output shape: (2, 2, 1024)
+            # layers.Conv2D(
+            #     1024,
+            #     kernel_size=5,
+            #     strides=2,
+            #     padding="same",
+            #     activation="relu",
+            #     kernel_initializer=init,
+            # ),
+            # layers.BatchNormalization(),
+            # layers.LeakyReLU(alpha=0.2),
+            # # Output shape: (1, 1, 1024)
             layers.Flatten(),
             layers.Dense(2 * latent_dim, kernel_initializer=init),
             # Latent output (No activation)

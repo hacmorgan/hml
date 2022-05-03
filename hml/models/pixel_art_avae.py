@@ -32,7 +32,7 @@ import PIL.Image
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow_io as tfio
-# import tensorflow_datasets as tfds
+import tensorflow_datasets as tfds
 # import tensorflow_gan as tfgan
 
 
@@ -220,7 +220,7 @@ def compute_vae_loss(
     beta: float = 0e0,
     gamma: float = 0e0,
     delta: float = 0e0,
-    epsilon: float = 1e1,
+    epsilon: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
@@ -625,31 +625,53 @@ def train(
     #     .prefetch(tf.data.AUTOTUNE)
     # )
 
-    # Cats and dogs dataset
+    # CelebA faces dataset
+    dataset = tfds.load(name="celeb_a")
     train_images = (
-        tf.data.Dataset.from_generator(
-            ResizeDataset(dataset_path=dataset_path, output_shape=train_crop_shape),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-        )
-        .shuffle(buffer_size)
+        dataset["train"]
+        .map(stanford_dogs_preprocess)
+        # .map(lambda x: data_augmentation(x, training=True))
+        .shuffle(batch_size)
         .batch(batch_size)
         .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
     val_images = (
-        tf.data.Dataset.from_generator(
-            ResizeDataset(dataset_path=val_path, output_shape=train_crop_shape),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-        )
-        .shuffle(buffer_size)
+        dataset["test"]
+        .map(stanford_dogs_preprocess)
+        .shuffle(batch_size)
         .batch(batch_size)
+        .cache()
+        .prefetch(tf.data.AUTOTUNE)
     )
+
+    # # Cats and dogs dataset
+    # train_images = (
+    #     tf.data.Dataset.from_generator(
+    #         ResizeDataset(dataset_path=dataset_path, output_shape=train_crop_shape),
+    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+    #     )
+    #     .shuffle(buffer_size)
+    #     .batch(batch_size)
+    #     .cache()
+    #     .prefetch(tf.data.AUTOTUNE)
+    # )
+    # val_images = (
+    #     tf.data.Dataset.from_generator(
+    #         ResizeDataset(dataset_path=val_path, output_shape=train_crop_shape),
+    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+    #     )
+    #     .shuffle(buffer_size)
+    #     .batch(batch_size)
+    # )
 
     # Save a few images for visualisation
     train_test_image_batch = next(iter(train_images))
     train_test_images = train_test_image_batch[:8, ...]
     val_test_image_batch = next(iter(val_images))
     val_test_images = val_test_image_batch[:8, ...]
+
+    print(train_test_images[0])
 
     # Make progress dir and reproductions dir for outputs
     os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
@@ -1062,7 +1084,7 @@ def main(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (256, 256, 3),
+    train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
     buffer_size: int = 1000,
     batch_size: int = 128,
     epochs_per_turn: int = 1,
@@ -1105,7 +1127,7 @@ def main(
     #     name=None,
     # )
     lr = LRS(
-        max_lr=5e-5,
+        max_lr=1e-4,
         min_lr=5e-6,
         start_decay_epoch=0,
         stop_decay_epoch=1500,
