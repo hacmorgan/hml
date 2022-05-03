@@ -625,45 +625,45 @@ def train(
     #     .prefetch(tf.data.AUTOTUNE)
     # )
 
-    # CelebA faces dataset
-    dataset = tfds.load(name="celeb_a")
-    train_images = (
-        dataset["train"]
-        .map(stanford_dogs_preprocess)
-        # .map(lambda x: data_augmentation(x, training=True))
-        .shuffle(batch_size)
-        .batch(batch_size)
-        .cache()
-        .prefetch(tf.data.AUTOTUNE)
-    )
-    val_images = (
-        dataset["test"]
-        .map(stanford_dogs_preprocess)
-        .shuffle(batch_size)
-        .batch(batch_size)
-        .cache()
-        .prefetch(tf.data.AUTOTUNE)
-    )
-
-    # # Cats and dogs dataset
+    # # CelebA faces dataset
+    # dataset = tfds.load(name="celeb_a")
     # train_images = (
-    #     tf.data.Dataset.from_generator(
-    #         ResizeDataset(dataset_path=dataset_path, output_shape=train_crop_shape),
-    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-    #     )
-    #     .shuffle(buffer_size)
+    #     dataset["train"]
+    #     .map(stanford_dogs_preprocess)
+    #     # .map(lambda x: data_augmentation(x, training=True))
+    #     .shuffle(batch_size)
     #     .batch(batch_size)
     #     .cache()
     #     .prefetch(tf.data.AUTOTUNE)
     # )
     # val_images = (
-    #     tf.data.Dataset.from_generator(
-    #         ResizeDataset(dataset_path=val_path, output_shape=train_crop_shape),
-    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-    #     )
-    #     .shuffle(buffer_size)
+    #     dataset["test"]
+    #     .map(stanford_dogs_preprocess)
+    #     .shuffle(batch_size)
     #     .batch(batch_size)
+    #     .cache()
+    #     .prefetch(tf.data.AUTOTUNE)
     # )
+
+    # Cats and dogs dataset
+    train_images = (
+        tf.data.Dataset.from_generator(
+            ResizeDataset(dataset_path=dataset_path, output_shape=train_crop_shape),
+            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        )
+        .shuffle(buffer_size)
+        .batch(batch_size)
+        .cache()
+        .prefetch(tf.data.AUTOTUNE)
+    )
+    val_images = (
+        tf.data.Dataset.from_generator(
+            ResizeDataset(dataset_path=val_path, output_shape=train_crop_shape),
+            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        )
+        .shuffle(buffer_size)
+        .batch(batch_size)
+    )
 
     # Save a few images for visualisation
     train_test_image_batch = next(iter(train_images))
