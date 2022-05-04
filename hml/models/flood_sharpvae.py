@@ -140,9 +140,9 @@ def reproduce_save_image(
 
         # Unstack training inputs into context blocks
         context = np.zeros((2 * block_width, 2 * block_width, 3))
-        context[block_width : 2 * block_width, 0:block_width, :] = test_image[0:3]
-        context[:block_width, 0:block_width, :] = test_image[3:6]
-        context[:block_width, block_width : 2 * block_width, :] = test_image[6:9]
+        context[block_width : 2 * block_width, 0:block_width, :] = test_image[..., 0:3]
+        context[:block_width, 0:block_width, :] = test_image[..., 3:6]
+        context[:block_width, block_width : 2 * block_width, :] = test_image[..., 6:9]
 
         # Fill in the bottom right block with training label or reproduction
         ground_truth = context.copy()
@@ -201,6 +201,53 @@ def show_reproduction_quality(
     # ).start()
     reproduce_save_image(test_images, test_labels, reproductions, output_path)
     return reproductions
+
+
+def save_flood_generated_image(image: np.ndarray, output_dir: str, epoch: int) -> None:
+    """
+    Save an image
+    """
+    plt.subplot(1, 1, 1)
+    plt.imshow(image)
+    plt.axis("off")
+    output_path = os.path.join(
+        output_dir, f"flood_generation_at_epoch_{epoch:04d}.png"
+    )
+    plt.savefig(output_path, dpi=250)
+
+
+def flood_generate(
+    autoencoder: tf.keras.models.Model,
+    seed: tf.Tensor,
+    shape: Tuple[int, int] = (5, 5),
+) -> tf.Tensor:
+    """
+    Flood-fill a large image by autogenerating the first block, then generatng from
+    context
+
+    Args:
+        autoencoder: Autoencoder model
+        shape: Desired shape (in blocks) of output image
+    """
+    first_block = True
+    block_width = autoencoder.input_shape_[1]
+    padded_output_image = np.zeros(((shape[0] + 2) * block_width, (shape[1] + 2) * block_width, 3))
+    for y in range(shape[0]):
+        for x in range(shape[1]):
+            if first_block:
+                block = autoencoder.sample(seed[0:1, :])
+                first_block = False
+            else:
+                context = np.dstack(
+                    [
+                        padded_output_image[(y+1)*block_width : (y+2)*block_width, (x+0)*block_width : (x+1)*block_width, :],
+                        padded_output_image[(y+0)*block_width : (y+1)*block_width, (x+0)*block_width : (x+1)*block_width, :],
+                        padded_output_image[(y+0)*block_width : (y+1)*block_width, (x+1)*block_width : (x+2)*block_width, :],
+                    ]
+                )
+                block = autoencoder.call(tf.expand_dims(context, axis=0), training=False)
+            padded_output_image[(y+1)*block_width : (y+2)*block_width, (x+1)*block_width : (x+2)*block_width, :] = block
+    return padded_output_image[block_width:shape[0]*block_width, block_width:shape[1] * block_width, :]
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
@@ -630,7 +677,7 @@ def train(
             tf.TensorSpec(shape=train_crop_shape[0:2] + (9,), dtype=tf.float32),
             tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
         ),
-    ).batch(batch_size)
+    ).shuffle(buffer_size).batch(batch_size)
 
     # # Stanford dogs dataset
     # dataset = tfds.load(name="stanford_dogs")
@@ -702,6 +749,7 @@ def train(
 
     # Make progress dir and reproductions dir for outputs
     os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
+    os.makedirs(flood_generations_dir := os.path.join(model_dir, "flood_generations"), exist_ok=True)
     os.makedirs(
         reproductions_dir := os.path.join(model_dir, "reproductions"), exist_ok=True
     )
@@ -808,6 +856,10 @@ def train(
 
         # Produce demo output every epoch the generator trains
         generated = generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
+
+        # Flood generate a bigger image
+        flood_generated_image = flood_generate(autoencoder, seed)
+        save_flood_generated_image(flood_generated_image, output_dir=flood_generations_dir, epoch=epoch)
 
         # Show some examples of how the model reconstructs its inputs.
         train_reconstructed = show_reproduction_quality(
@@ -1157,9 +1209,7 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    # STEPS_PER_EPOCH = 780  # Cats - minibatch size 32
-    # STEPS_PER_EPOCH = 390  # Cats - minibatch size 64
-    STEPS_PER_EPOCH = 195  # Cats - minibatch size 128
+    STEPS_PER_EPOCH = 225  # pixel_art - minibatch size 128
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],

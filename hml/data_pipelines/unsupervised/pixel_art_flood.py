@@ -91,8 +91,13 @@ def pad_and_yield_crops(
     (image_height, image_width, _) = image.shape
     _, crop_width, _ = shape
     image_padded = pad_image(image, pad_width=crop_width)
+    first_block = True
     for x in range(crop_width, image_width - crop_width, crop_width):
         for y in range(crop_width, image_height - crop_width, crop_width):
+            # Skip first block, we have no good context
+            if first_block:
+                first_block = False
+                continue
             blocks = {
                 0: image_padded[y : y + crop_width, x : x + crop_width, :],
                 1: image_padded[y : y + crop_width, x - crop_width : x, :],
