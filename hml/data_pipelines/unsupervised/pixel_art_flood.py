@@ -105,9 +105,7 @@ def pad_and_yield_crops(
                     y : y + crop_width, x + crop_width : x + 2 * crop_width, :
                 ],
             }
-            outputs = [
-                [np.dstack([blocks[idx] for idx in (1, 2, 3)]), blocks[0]]
-            ]
+            outputs = [[np.dstack([blocks[idx] for idx in (1, 2, 3)]), blocks[0]]]
             if flip_x:
                 outputs.append(
                     [
@@ -130,7 +128,10 @@ class PixelArtFloodDataset:
     """
 
     def __init__(
-            self, dataset_path: str, crop_shape: Tuple[int, int, int], flip_x: bool = True,
+        self,
+        dataset_path: str,
+        crop_shape: Tuple[int, int, int],
+        flip_x: bool = True,
     ) -> "PixelArtFloodDataset":
         """
         Construct the data generator.
@@ -165,7 +166,9 @@ class PixelArtFloodDataset:
                 continue
             if image_np.shape[2] > 3:
                 image_np = image_np[:, :, :3]
-            yield from pad_and_yield_crops(image_np, shape=self.crop_shape_, flip_x=self.flip_x_)
+            yield from pad_and_yield_crops(
+                image_np, shape=self.crop_shape_, flip_x=self.flip_x_
+            )
 
     def find_training_images(self) -> Iterable[str]:
         """

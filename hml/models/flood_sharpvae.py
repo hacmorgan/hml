@@ -124,26 +124,35 @@ def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
 
 
 def reproduce_save_image(
-        test_images: tf.Tensor, test_labels: tf.Tensor, reproductions: tf.Tensor, output_path: str
+    test_images: tf.Tensor,
+    test_labels: tf.Tensor,
+    reproductions: tf.Tensor,
+    output_path: str,
 ) -> None:
     """
     Regenerate some images and save to file.
     """
     block_width = test_images.shape[1]
-    for i, (test_image, test_label, reproduction) in enumerate(zip(test_images, test_labels, reproductions)):
+    for i, (test_image, test_label, reproduction) in enumerate(
+        zip(test_images, test_labels, reproductions)
+    ):
         plt.subplot(2, 4, i + 1)
 
         # Unstack training inputs into context blocks
         context = np.zeros((2 * block_width, 2 * block_width, 3))
-        context[block_width:2*block_width, 0:block_width, :] = test_image[0:3]
+        context[block_width : 2 * block_width, 0:block_width, :] = test_image[0:3]
         context[:block_width, 0:block_width, :] = test_image[3:6]
-        context[:block_width, block_width:2*block_width, :] = test_image[6:9]
+        context[:block_width, block_width : 2 * block_width, :] = test_image[6:9]
 
         # Fill in the bottom right block with training label or reproduction
         ground_truth = context.copy()
-        ground_truth[block_width:2*block_width, block_width:2*block_width, :] = test_label
+        ground_truth[
+            block_width : 2 * block_width, block_width : 2 * block_width, :
+        ] = test_label
         reproduced = context.copy()
-        reproduced[block_width:2*block_width, block_width:2*block_width, :] = reproduction
+        reproduced[
+            block_width : 2 * block_width, block_width : 2 * block_width, :
+        ] = reproduction
 
         # Stack both and save
         stacked = tf.concat([ground_truth, reproduced], axis=0)
@@ -441,7 +450,11 @@ def train_step(
 
 
 def compute_mse_losses(
-    autoencoder: tf.keras.models.Model, train_images: tf.Tensor, val_images: tf.Tensor
+    autoencoder: tf.keras.models.Model,
+    train_images: tf.Tensor,
+    train_labels: tf.Tensor,
+    val_images: tf.Tensor,
+    val_labels: tf.Tensor,
 ) -> Tuple[float, float]:
     """
     Compute loss on training and validation data.
@@ -453,8 +466,8 @@ def compute_mse_losses(
     """
     reproduced_train_images = autoencoder.call(train_images, training=False)
     reproduced_val_images = autoencoder.call(val_images, training=False)
-    train_loss = mse(train_images, reproduced_train_images)
-    val_loss = mse(val_images, reproduced_val_images)
+    train_loss = mse(train_labels, reproduced_train_images)
+    val_loss = mse(val_labels, reproduced_val_images)
     return train_loss, val_loss
 
 
@@ -604,23 +617,20 @@ def train(
             output_signature=(
                 tf.TensorSpec(shape=train_crop_shape[0:2] + (9,), dtype=tf.float32),
                 tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-            )
+            ),
         )
         .shuffle(buffer_size)
         .batch(batch_size)
         .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
-    val_images = (
-        tf.data.Dataset.from_generator(
-            PixelArtFloodDataset(dataset_path=val_path, crop_shape=train_crop_shape),
-            output_signature=(
-                tf.TensorSpec(shape=train_crop_shape[0:2] + (9,), dtype=tf.float32),
-                tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-            )
-        )
-        .batch(batch_size)
-    )
+    val_images = tf.data.Dataset.from_generator(
+        PixelArtFloodDataset(dataset_path=val_path, crop_shape=train_crop_shape),
+        output_signature=(
+            tf.TensorSpec(shape=train_crop_shape[0:2] + (9,), dtype=tf.float32),
+            tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        ),
+    ).batch(batch_size)
 
     # # Stanford dogs dataset
     # dataset = tfds.load(name="stanford_dogs")
@@ -801,15 +811,27 @@ def train(
 
         # Show some examples of how the model reconstructs its inputs.
         train_reconstructed = show_reproduction_quality(
-            autoencoder, epoch + 1, train_test_images, train_test_label_batch, reproductions_dir
+            autoencoder,
+            epoch + 1,
+            train_test_images,
+            train_test_label_batch,
+            reproductions_dir,
         )
         val_reconstructed = show_reproduction_quality(
-            autoencoder, epoch + 1, val_test_images, val_test_label_batch, val_reproductions_dir
+            autoencoder,
+            epoch + 1,
+            val_test_images,
+            val_test_label_batch,
+            val_reproductions_dir,
         )
 
         # Compute loss on training and validation data
         train_loss, val_loss = compute_mse_losses(
-            autoencoder, train_test_image_batch, train_test_label_batch, val_test_image_batch, val_test_label_batch
+            autoencoder,
+            train_test_image_batch,
+            train_test_label_batch,
+            val_test_image_batch,
+            val_test_label_batch,
         )
 
         # Get sample of encoder output
