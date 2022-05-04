@@ -38,7 +38,7 @@ import tensorflow_datasets as tfds
 
 from hml.architectures.convolutional.autoencoders.avae import AVAE
 # from hml.architectures.convolutional.discriminators import avae_discriminator
-# from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
+from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
 from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
 
 
@@ -583,27 +583,27 @@ def train(
 
     # Instantiate train and val datasets
 
-    # # Pixel Art dataset
-    # train_images = (
-    #     tf.data.Dataset.from_generator(
-    #         PixelArtSigmoidDataset(
-    #             dataset_path=dataset_path, crop_shape=train_crop_shape
-    #         ),
-    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-    #     )
-    #     .shuffle(buffer_size)
-    #     .batch(batch_size)
-    #     .cache()
-    #     .prefetch(tf.data.AUTOTUNE)
-    # )
-    # val_images = (
-    #     tf.data.Dataset.from_generator(
-    #         PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
-    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-    #     )
-    #     .shuffle(buffer_size)
-    #     .batch(batch_size)
-    # )
+    # Pixel Art dataset
+    train_images = (
+        tf.data.Dataset.from_generator(
+            PixelArtSigmoidDataset(
+                dataset_path=dataset_path, crop_shape=train_crop_shape
+            ),
+            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        )
+        .shuffle(buffer_size)
+        .batch(batch_size)
+        .cache()
+        .prefetch(tf.data.AUTOTUNE)
+    )
+    val_images = (
+        tf.data.Dataset.from_generator(
+            PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
+            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+        )
+        .shuffle(buffer_size)
+        .batch(batch_size)
+    )
 
     # # Stanford dogs dataset
     # dataset = tfds.load(name="stanford_dogs")
@@ -645,25 +645,25 @@ def train(
     #     .prefetch(tf.data.AUTOTUNE)
     # )
 
-    # Cats and dogs dataset
-    train_images = (
-        tf.data.Dataset.from_generator(
-            ResizeDataset(dataset_path=dataset_path, output_shape=train_crop_shape),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-        )
-        .shuffle(buffer_size)
-        .batch(batch_size)
-        .cache()
-        .prefetch(tf.data.AUTOTUNE)
-    )
-    val_images = (
-        tf.data.Dataset.from_generator(
-            ResizeDataset(dataset_path=val_path, output_shape=train_crop_shape),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-        )
-        .shuffle(buffer_size)
-        .batch(batch_size)
-    )
+    # # Cats and dogs dataset
+    # train_images = (
+    #     tf.data.Dataset.from_generator(
+    #         ResizeDataset(dataset_path=dataset_path, output_shape=train_crop_shape),
+    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+    #     )
+    #     .shuffle(buffer_size)
+    #     .batch(batch_size)
+    #     .cache()
+    #     .prefetch(tf.data.AUTOTUNE)
+    # )
+    # val_images = (
+    #     tf.data.Dataset.from_generator(
+    #         ResizeDataset(dataset_path=val_path, output_shape=train_crop_shape),
+    #         output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+    #     )
+    #     .shuffle(buffer_size)
+    #     .batch(batch_size)
+    # )
 
     # Save a few images for visualisation
     train_test_image_batch = next(iter(train_images))
@@ -1223,7 +1223,7 @@ def get_args() -> argparse.Namespace:
         "--dataset",
         "-d",
         type=str,
-        default="/mnt/storage/ml/data/PetImages/cat_train/",
+        default="/mnt/storage/ml/data/pixel-art/train",
         help="Path to dataset directory, containing training images",
     )
     parser.add_argument(
@@ -1261,7 +1261,7 @@ def get_args() -> argparse.Namespace:
         "--validation-dataset",
         "-v",
         type=str,
-        default="/mnt/storage/ml/data/PetImages/cat_val/",
+        default="/mnt/storage/ml/data/pixel-art/val",
         help="Path to dataset directory, containing images to test with",
     )
     return parser.parse_args()
