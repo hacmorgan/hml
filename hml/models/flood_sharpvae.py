@@ -1158,7 +1158,7 @@ def main(
     #     step_size=3 * STEPS_PER_EPOCH,
     # )
 
-    autoencoder = AVAE(latent_dim=latent_dim)
+    autoencoder = VAE(latent_dim=latent_dim, input_shape=train_crop_shape[:2] + (9,))
     # discriminator = avae_discriminator.model(latent_dim=latent_dim)
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)

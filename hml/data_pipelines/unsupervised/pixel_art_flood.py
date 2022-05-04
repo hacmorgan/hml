@@ -40,7 +40,7 @@ def pad_image(image: np.ndarray, pad_width: int) -> np.ndarray:
     padded_image_shape = (height + pad_width, width + pad_width, channels)
     padded_image = np.zeros(shape=padded_image_shape, dtype=image.dtype)
     padded_image[
-        pad_width : pad_width + height, pad_width : pad_width + height, :
+        pad_width : pad_width + height, pad_width : pad_width + width, :
     ] = image
     return padded_image
 
@@ -89,37 +89,37 @@ def pad_and_yield_crops(
         Desired output block (label)
     """
     (image_height, image_width, _) = image.shape
-    crop_height, crop_width, _ = shape
+    _, crop_width, _ = shape
     image_padded = pad_image(image, pad_width=crop_width)
-    for x in range(crop_width, image_width, crop_width):
-        for y in range(crop_height, image_height, crop_height):
+    for x in range(crop_width, image_width - crop_width, crop_width):
+        for y in range(crop_width, image_height - crop_width, crop_width):
             blocks = {
-                0: image_padded[y : y + crop_height, x : x + crop_width, :],
-                1: image_padded[y : y + crop_height, x - crop_width : x, :],
-                2: image_padded[y - crop_height : y, x - crop_width : x, :],
-                3: image_padded[y - crop_height : y, x : x + crop_width, :],
+                0: image_padded[y : y + crop_width, x : x + crop_width, :],
+                1: image_padded[y : y + crop_width, x - crop_width : x, :],
+                2: image_padded[y - crop_width : y, x - crop_width : x, :],
+                3: image_padded[y - crop_width : y, x : x + crop_width, :],
                 4: image_padded[
-                    y - crop_height : y, x + crop_width : x + 2 * crop_width, :
+                    y - crop_width : y, x + crop_width : x + 2 * crop_width, :
                 ],
                 5: image_padded[
-                    y : y + crop_height, x + crop_width : x + 2 * crop_width, :
+                    y : y + crop_width, x + crop_width : x + 2 * crop_width, :
                 ],
             }
             outputs = [
-                [np.stack(arrays=[blocks[idx] for idx in (1, 2, 3)], axis=2), blocks[0]]
+                [np.dstack([blocks[idx] for idx in (1, 2, 3)]), blocks[0]]
             ]
             if flip_x:
                 outputs.append(
                     [
                         np.fliplr(array)
                         for array in [
-                            np.stack(arrays=[blocks[idx] for idx in (5, 4, 3)], axis=2),
+                            np.dstack([blocks[idx] for idx in (5, 4, 3)]),
                             blocks[0],
                         ]
                     ]
                 )
             yield from (
-                [normalise(raster) for raster in (train_input, label)]
+                tuple(normalise(raster) for raster in (train_input, label))
                 for train_input, label in outputs
             )
 
