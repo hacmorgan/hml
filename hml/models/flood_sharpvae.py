@@ -16,10 +16,7 @@ import datetime
 import os
 import subprocess
 import sys
-import threading
 import time
-
-# import tkinter
 
 import matplotlib
 
@@ -28,20 +25,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
 
-# import PIL.ImageTk
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow_io as tfio
 import tensorflow_datasets as tfds
 
-# import tensorflow_gan as tfgan
 
+from hml.architectures.convolutional.autoencoders.vae import VAE
 
-from hml.architectures.convolutional.autoencoders.avae import AVAE
-
-# from hml.architectures.convolutional.discriminators import avae_discriminator
-from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
-from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
+from hml.data_pipelines.unsupervised.pixel_art_flood import PixelArtFloodDataset
 
 
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
@@ -132,16 +124,29 @@ def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
 
 
 def reproduce_save_image(
-    test_images: tf.Tensor, reproductions: tf.Tensor, output_path: str
+        test_images: tf.Tensor, test_labels: tf.Tensor, reproductions: tf.Tensor, output_path: str
 ) -> None:
     """
     Regenerate some images and save to file.
-
-    This is done in a separate thread to avoid waiting for io.
     """
-    for i, (test_image, reproduction) in enumerate(zip(test_images, reproductions)):
+    block_width = test_images.shape[1]
+    for i, (test_image, test_label, reproduction) in enumerate(zip(test_images, test_labels, reproductions)):
         plt.subplot(2, 4, i + 1)
-        stacked = tf.concat([test_image, reproduction], axis=0)
+
+        # Unstack training inputs into context blocks
+        context = np.zeros((2 * block_width, 2 * block_width, 3))
+        context[block_width:2*block_width, 0:block_width, :] = test_image[0:3]
+        context[:block_width, 0:block_width, :] = test_image[3:6]
+        context[:block_width, block_width:2*block_width, :] = test_image[6:9]
+
+        # Fill in the bottom right block with training label or reproduction
+        ground_truth = context.copy()
+        ground_truth[block_width:2*block_width, block_width:2*block_width, :] = test_label
+        reproduced = context.copy()
+        reproduced[block_width:2*block_width, block_width:2*block_width, :] = reproduction
+
+        # Stack both and save
+        stacked = tf.concat([ground_truth, reproduced], axis=0)
         rgb_image = np.array((stacked * 255.0)).astype(np.uint8)
         plt.imshow(rgb_image)
         plt.axis("off")
@@ -170,6 +175,7 @@ def show_reproduction_quality(
     autoencoder: tf.keras.models.Model,
     epoch: int,
     test_images: tf.Tensor,
+    test_labels: tf.Tensor,
     reproductions_dir: str,
 ) -> tf.Tensor:
     """
@@ -184,7 +190,7 @@ def show_reproduction_quality(
     # threading.Thread(
     #     target=reproduce_save_image, args=(test_images, reproductions, output_path)
     # ).start()
-    reproduce_save_image(test_images, reproductions, output_path)
+    reproduce_save_image(test_images, test_labels, reproductions, output_path)
     return reproductions
 
 
@@ -217,7 +223,8 @@ def variance_of_laplacian(images: tf.Tensor, ksize: int = 7) -> float:
 def compute_vae_loss(
     vae: tf.keras.models.Model,
     # discriminator: tf.keras.Sequential,
-    x: tf.Tensor,
+    images: tf.Tensor,
+    labels: tf.Tensor,
     alpha: float = 1e0,
     beta: float = 0e0,
     gamma: float = 0e0,
@@ -231,7 +238,8 @@ def compute_vae_loss(
         vae: VAE model - should have encode(), decode(), reparameterize(), and sample()
              methods
         discriminator: The discriminator model
-        x: Minibatch of training images
+        images: Minibatch of training images
+        labels: Minibatch of training labels
         alpha: Contribution of KL divergence loss to total loss
         beta: Contribution of discriminator loss on reconstructed images to total loss
         gamma: Contribution of discriminator loss on generated images to total loss
@@ -248,7 +256,7 @@ def compute_vae_loss(
         Generated images (used again to compute loss for training discriminator)
     """
     # Reconstruct a real image
-    mean, logvar = vae.encode(x)
+    mean, logvar = vae.encode(images)
     z = vae.reparameterize(mean, logvar)
     x_logit = vae.decode(z)
     reconstructed = vae.sample(z)
@@ -258,7 +266,7 @@ def compute_vae_loss(
     generated = vae.sample(z_gen)
 
     # Compute KL divergence loss
-    cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
+    cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=labels)
     logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
     logpz = log_normal_pdf(z, 0.0, 0.0)
     logqz_x = log_normal_pdf(z, mean, logvar)
@@ -306,7 +314,7 @@ def compute_vae_loss(
 
 def compute_discriminator_loss(
     discriminator: tf.keras.models.Model,
-    x: tf.Tensor,
+    images: tf.Tensor,
     reconstructed: tf.Tensor,
     generated: tf.Tensor,
     beta: float = 0e0,
@@ -317,7 +325,7 @@ def compute_discriminator_loss(
 
     Args:
         discriminator: Discriminator model
-        x: Training images
+        images: Training images
         reconstructed: Reconstructions of training images by autoencoder
         generated: Fake images generated by autoencoder
         beta: Contribution of loss on reconstructed images to total loss
@@ -330,7 +338,7 @@ def compute_discriminator_loss(
         Loss on generated images
     """
     # Run real images, reconstructed images, and fake images through discriminator
-    real_output = discriminator(x)
+    real_output = discriminator(images)
     reconstructed_output = discriminator(reconstructed)
     generated_output = discriminator(generated)
 
@@ -346,7 +354,8 @@ def compute_discriminator_loss(
 
 @tf.function
 def train_step(
-    images,
+    images: tf.Tensor,
+    labels: tf.Tensor,
     autoencoder: tf.keras.models.Model,
     # discriminator: tf.keras.models.Model,
     autoencoder_optimizer: "Optimizer",
@@ -385,6 +394,7 @@ def train_step(
             autoencoder,
             # discriminator,
             images,
+            labels,
         )
         # (
         #     discriminator_loss,
@@ -588,10 +598,13 @@ def train(
     # Pixel Art dataset
     train_images = (
         tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(
+            PixelArtFloodDataset(
                 dataset_path=dataset_path, crop_shape=train_crop_shape
             ),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            output_signature=(
+                tf.TensorSpec(shape=train_crop_shape[0:2] + (9,), dtype=tf.float32),
+                tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            )
         )
         .shuffle(buffer_size)
         .batch(batch_size)
@@ -600,10 +613,12 @@ def train(
     )
     val_images = (
         tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            PixelArtFloodDataset(dataset_path=val_path, crop_shape=train_crop_shape),
+            output_signature=(
+                tf.TensorSpec(shape=train_crop_shape[0:2] + (9,), dtype=tf.float32),
+                tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            )
         )
-        .shuffle(buffer_size)
         .batch(batch_size)
     )
 
@@ -668,9 +683,9 @@ def train(
     # )
 
     # Save a few images for visualisation
-    train_test_image_batch = next(iter(train_images))
+    train_test_image_batch, train_test_label_batch = next(iter(train_images))
     train_test_images = train_test_image_batch[:8, ...]
-    val_test_image_batch = next(iter(val_images))
+    val_test_image_batch, val_test_label_batch = next(iter(val_images))
     val_test_images = val_test_image_batch[:8, ...]
 
     print(train_test_images[0])
@@ -740,10 +755,11 @@ def train(
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
 
-        for step, image_batch in enumerate(train_images):
+        for step, (image_batch, label_batch) in enumerate(train_images):
             # Perform training step
             train_step(
                 images=image_batch,
+                labels=label_batch,
                 autoencoder=autoencoder,
                 # discriminator=discriminator,
                 autoencoder_optimizer=autoencoder_optimizer,
@@ -785,15 +801,15 @@ def train(
 
         # Show some examples of how the model reconstructs its inputs.
         train_reconstructed = show_reproduction_quality(
-            autoencoder, epoch + 1, train_test_images, reproductions_dir
+            autoencoder, epoch + 1, train_test_images, train_test_label_batch, reproductions_dir
         )
         val_reconstructed = show_reproduction_quality(
-            autoencoder, epoch + 1, val_test_images, val_reproductions_dir
+            autoencoder, epoch + 1, val_test_images, val_test_label_batch, val_reproductions_dir
         )
 
         # Compute loss on training and validation data
         train_loss, val_loss = compute_mse_losses(
-            autoencoder, train_test_image_batch, val_test_image_batch
+            autoencoder, train_test_image_batch, train_test_label_batch, val_test_image_batch, val_test_label_batch
         )
 
         # Get sample of encoder output

@@ -19,6 +19,7 @@ setup(
         "hml.models",
     ],
     scripts=[
+        "hml/models/flood_sharpvae.py",
         "hml/models/pixel_art.py",
         "hml/models/pixel_art_ae.py",
         "hml/models/pixel_art_vae.py",

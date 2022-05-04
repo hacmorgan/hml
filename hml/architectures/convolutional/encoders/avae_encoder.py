@@ -1,8 +1,12 @@
+from typing import Tuple
+
 import tensorflow as tf
 from tensorflow.keras import layers
 
 
-def model(latent_dim: int) -> tf.keras.Sequential:
+def model(
+    latent_dim: int, input_shape: Tuple[int, int, int] = (64, 64, 3)
+) -> tf.keras.Sequential:
     """
     An encoder based on the DCGAN paper's discriminator
     """
@@ -10,7 +14,7 @@ def model(latent_dim: int) -> tf.keras.Sequential:
     architecture = tf.keras.Sequential(
         [
             # Input
-            layers.InputLayer(input_shape=(64, 64, 3)),
+            layers.InputLayer(input_shape=input_shape),
             layers.Conv2D(
                 128,
                 kernel_size=5,
