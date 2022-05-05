@@ -1262,7 +1262,7 @@ def main(
         save_generator_output: Save generated images instead of displaying
     """
     # STEPS_PER_EPOCH = 225  # pixel_art - minibatch size 128
-    STEPS_PER_EPOCH = 510  # expanded pixel_art - minibatch size 128
+    STEPS_PER_EPOCH = 600  # expanded pixel_art - minibatch size 128
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
@@ -1270,9 +1270,9 @@ def main(
     #     name=None,
     # )
     lr = LRS(
-        max_lr=1e-4,
+        max_lr=2e-4,
         min_lr=5e-6,
-        start_decay_epoch=0,
+        start_decay_epoch=100,
         stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
