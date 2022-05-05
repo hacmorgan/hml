@@ -210,9 +210,7 @@ def save_flood_generated_image(image: np.ndarray, output_dir: str, epoch: int) -
     plt.subplot(1, 1, 1)
     plt.imshow(image)
     plt.axis("off")
-    output_path = os.path.join(
-        output_dir, f"flood_generation_at_epoch_{epoch:04d}.png"
-    )
+    output_path = os.path.join(output_dir, f"flood_generation_at_epoch_{epoch:04d}.png")
     plt.savefig(output_path, dpi=250)
 
 
@@ -231,7 +229,9 @@ def flood_generate(
     """
     first_block = True
     block_width = autoencoder.input_shape_[1]
-    padded_output_image = np.zeros(((shape[0] + 2) * block_width, (shape[1] + 2) * block_width, 3))
+    padded_output_image = np.zeros(
+        ((shape[0] + 2) * block_width, (shape[1] + 2) * block_width, 3)
+    )
     for y in range(shape[0]):
         for x in range(shape[1]):
             if first_block:
@@ -240,14 +240,34 @@ def flood_generate(
             else:
                 context = np.dstack(
                     [
-                        padded_output_image[(y+1)*block_width : (y+2)*block_width, (x+0)*block_width : (x+1)*block_width, :],
-                        padded_output_image[(y+0)*block_width : (y+1)*block_width, (x+0)*block_width : (x+1)*block_width, :],
-                        padded_output_image[(y+0)*block_width : (y+1)*block_width, (x+1)*block_width : (x+2)*block_width, :],
+                        padded_output_image[
+                            (y + 1) * block_width : (y + 2) * block_width,
+                            (x + 0) * block_width : (x + 1) * block_width,
+                            :,
+                        ],
+                        padded_output_image[
+                            (y + 0) * block_width : (y + 1) * block_width,
+                            (x + 0) * block_width : (x + 1) * block_width,
+                            :,
+                        ],
+                        padded_output_image[
+                            (y + 0) * block_width : (y + 1) * block_width,
+                            (x + 1) * block_width : (x + 2) * block_width,
+                            :,
+                        ],
                     ]
                 )
-                block = autoencoder.call(tf.expand_dims(context, axis=0), training=False)
-            padded_output_image[(y+1)*block_width : (y+2)*block_width, (x+1)*block_width : (x+2)*block_width, :] = block
-    return padded_output_image[block_width:shape[0]*block_width, block_width:shape[1] * block_width, :]
+                block = autoencoder.call(
+                    tf.expand_dims(context, axis=0), training=False
+                )
+            padded_output_image[
+                (y + 1) * block_width : (y + 2) * block_width,
+                (x + 1) * block_width : (x + 2) * block_width,
+                :,
+            ] = block
+    return padded_output_image[
+        block_width : shape[0] * block_width, block_width : shape[1] * block_width, :
+    ]
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
@@ -671,13 +691,17 @@ def train(
         .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
-    val_images = tf.data.Dataset.from_generator(
-        PixelArtFloodDataset(dataset_path=val_path, crop_shape=train_crop_shape),
-        output_signature=(
-            tf.TensorSpec(shape=train_crop_shape[0:2] + (9,), dtype=tf.float32),
-            tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
-        ),
-    ).shuffle(buffer_size).batch(batch_size)
+    val_images = (
+        tf.data.Dataset.from_generator(
+            PixelArtFloodDataset(dataset_path=val_path, crop_shape=train_crop_shape),
+            output_signature=(
+                tf.TensorSpec(shape=train_crop_shape[0:2] + (9,), dtype=tf.float32),
+                tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            ),
+        )
+        .shuffle(buffer_size)
+        .batch(batch_size)
+    )
 
     # # Stanford dogs dataset
     # dataset = tfds.load(name="stanford_dogs")
@@ -749,7 +773,6 @@ def train(
 
     # Make progress dir and reproductions dir for outputs
     os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
-    os.makedirs(flood_generations_dir := os.path.join(model_dir, "flood_generations"), exist_ok=True)
     os.makedirs(
         reproductions_dir := os.path.join(model_dir, "reproductions"), exist_ok=True
     )
@@ -757,6 +780,13 @@ def train(
         val_reproductions_dir := os.path.join(model_dir, "val_reproductions"),
         exist_ok=True,
     )
+    for idx in range(4):
+        os.makedirs(
+            flood_generations_dir := os.path.join(
+                model_dir, "flood_generations", str(idx)
+            ),
+            exist_ok=True,
+        )
 
     # Set starting and end epoch according to whether we are continuing training
     epoch_log_file = os.path.join(model_dir, "epoch_log")
@@ -858,8 +888,19 @@ def train(
         generated = generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
 
         # Flood generate a bigger image
-        flood_generated_image = flood_generate(autoencoder, seed)
-        save_flood_generated_image(flood_generated_image, output_dir=flood_generations_dir, epoch=epoch)
+        flood_generated_images = None
+        for idx, single_seed in enumerate(seed[:4, :]):
+            flood_generated_image = flood_generate(autoencoder, single_seed)
+            flood_generated_images = (
+                tf.stack((flood_generated_image, flood_generated_images))
+                if flood_generated_images is not None
+                else flood_generated_image
+            )
+            save_flood_generated_image(
+                flood_generated_image,
+                output_dir=os.path.join(flood_generations_dir, str(idx)),
+                epoch=epoch,
+            )
 
         # Show some examples of how the model reconstructs its inputs.
         train_reconstructed = show_reproduction_quality(
@@ -993,6 +1034,9 @@ def train(
             )
             tf.summary.image("reconstructed val images", val_reconstructed, step=epoch)
             tf.summary.image("generated images", generated, step=epoch)
+            tf.summary.image(
+                "flood generated images", flood_generated_images, step=epoch
+            )
 
         # Save the model every 15 epochs
         if (epoch + 1) % 15 == 0:
@@ -1044,6 +1088,7 @@ def generate(
     latent_dim: int = 50,
     save_output: bool = False,
     sample: bool = True,
+    flood_shape: Optional[Tuple[int, int]] = None,
 ) -> None:
     """
     Generate some pixel art
@@ -1053,16 +1098,23 @@ def generate(
         generator_input: Path to a 10x10 grayscale image to use as input. Random noise
                          used if not given.
         save_output: Save images instead of displaying
+        sample: Apply sigmoid to decoder output if true, return logits othverwise
+        flood_shape: If given, flood generate an image of given shape (in blocks)
+                     instead of generating a single block from noise.
     """
     if decoder_input is not None:
         input_raw = tf.io.read_file(decoder_input)
         input_decoded = tf.image.decode_image(input_raw)
-        latent_input = tf.reshape(input_decoded, [10, latent_dim])
+        latent_input = tf.reshape(input_decoded, [1, latent_dim])
     else:
-        latent_input = tf.random.normal([10, latent_dim])
+        latent_input = tf.random.normal([1, latent_dim])
     i = 0
     while True:
-        if sample:
+        if flood_shape is not None:
+            output = tf.expand_dims(
+                flood_generate(autoencoder, seed=latent_input), axis=0
+            )
+        elif sample:
             output = autoencoder.sample(latent_input)
         else:
             output = autoencoder.decoder_(latent_input, training=False)
@@ -1078,7 +1130,7 @@ def generate(
             i += 1
         else:
             plt.show()
-        latent_input = tf.random.normal([10, latent_dim])
+        latent_input = tf.random.normal([1, latent_dim])
 
 
 def regenerate_images(slider_value: Optional[float] = None) -> None:
@@ -1185,6 +1237,7 @@ def main(
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
     save_generator_output: bool = False,
+    flood_generate_shape: Optional[Tuple[int, int]] = None,
     debug: bool = False,
     sample: bool = True,
 ) -> None:
@@ -1280,6 +1333,7 @@ def main(
         generate(
             autoencoder=autoencoder,
             decoder_input=decoder_input,
+            flood_shape=flood_generate_shape,
             latent_dim=latent_dim,
             save_output=save_generator_output,
             sample=sample,
@@ -1321,6 +1375,12 @@ def get_args() -> argparse.Namespace:
         "-e",
         action="store_true",
         help="Don't check git status, current test is just for debugging",
+    )
+    parser.add_argument(
+        "--flood-generate-shape",
+        "-f",
+        type=str,
+        help="Dimensions (in blocks) of flood generated image, e.g. '4,4'",
     )
     parser.add_argument(
         "--generator-input",
@@ -1377,6 +1437,11 @@ def cli_main(args: argparse.Namespace) -> int:
         ),
         dataset_path=args.dataset,
         debug=args.debug,
+        flood_generate_shape=tuple(
+            int(dim) for dim in args.flood_generate_shape.strip().split(",")
+        )
+        if args.flood_generate_shape is not None
+        else None,
         val_path=args.validation_dataset,
         continue_from_checkpoint=args.checkpoint,
         decoder_input=args.generator_input,
