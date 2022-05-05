@@ -110,8 +110,7 @@ class PixelArtSigmoidDataset:
                     f"Cannot open file: {image_path}, it will not be used for training"
                 )
             if len(image_np.shape) != 3:
-                print(f"Unusual image found: {image_path}, has shape {image_np.shape}")
-                continue
+                image_np = np.array(image.convert("RGB"))
             if image_np.shape[2] > 3:
                 image_np = image_np[:, :, :3]
             for image_crop in crops_from_full_size(image_np, shape=self.crop_shape_):

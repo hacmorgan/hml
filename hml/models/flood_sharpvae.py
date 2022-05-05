@@ -780,13 +780,12 @@ def train(
         val_reproductions_dir := os.path.join(model_dir, "val_reproductions"),
         exist_ok=True,
     )
+    flood_generations_dir = os.path.join(model_dir, "flood_generations")
     for idx in range(4):
         os.makedirs(
-            flood_generations_dir := os.path.join(
-                model_dir, "flood_generations", str(idx)
-            ),
+            os.path.join(flood_generations_dir, str(idx)),
             exist_ok=True,
-        )
+            )
 
     # Set starting and end epoch according to whether we are continuing training
     epoch_log_file = os.path.join(model_dir, "epoch_log")
@@ -890,11 +889,11 @@ def train(
         # Flood generate a bigger image
         flood_generated_images = None
         for idx, single_seed in enumerate(seed[:4, :]):
-            flood_generated_image = flood_generate(autoencoder, single_seed)
+            flood_generated_image = flood_generate(autoencoder, tf.expand_dims(single_seed, axis=0))
             flood_generated_images = (
-                tf.stack((flood_generated_image, flood_generated_images))
+                tf.concat((tf.expand_dims(flood_generated_image, axis=0), flood_generated_images), axis=0)
                 if flood_generated_images is not None
-                else flood_generated_image
+                else tf.expand_dims(flood_generated_image, axis=0)
             )
             save_flood_generated_image(
                 flood_generated_image,
@@ -1262,7 +1261,8 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    STEPS_PER_EPOCH = 225  # pixel_art - minibatch size 128
+    # STEPS_PER_EPOCH = 225  # pixel_art - minibatch size 128
+    STEPS_PER_EPOCH = 510  # expanded pixel_art - minibatch size 128
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
