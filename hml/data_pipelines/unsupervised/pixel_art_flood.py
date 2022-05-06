@@ -104,13 +104,15 @@ def pad_and_yield_crops(
                 0: image_padded[y : y + crop_width, x : x + crop_width, :],
                 1: image_padded[y : y + crop_width, x - crop_width : x, :],
                 2: image_padded[y - crop_width : y, x : x + crop_width, :],
-                3: image_padded[y : y + crop_width, x + crop_width : x + 2 * crop_width, :],
+                3: image_padded[
+                    y : y + crop_width, x + crop_width : x + 2 * crop_width, :
+                ],
                 4: image_padded[
                     y + crop_width : y + 2 * crop_width, x : x + crop_width, :
                 ],
             }
 
-            # Stack blocks 
+            # Stack blocks
             outputs = [(np.dstack([blocks[idx] for idx in (1, 2, 3, 4)]), blocks[0])]
             if flip_x:
                 outputs.append(

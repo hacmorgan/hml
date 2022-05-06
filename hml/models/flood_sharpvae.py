@@ -142,9 +142,13 @@ def reproduce_save_image(
         # Unstack training inputs into context blocks
         context = np.zeros((3 * block_width, 3 * block_width, 3))
         context[block_width : 2 * block_width, 0:block_width, :] = test_image[..., 0:3]
-        context[:block_width, block_width: 2*block_width, :] = test_image[..., 3:6]
-        context[block_width : 2 * block_width, block_width : 2 * block_width, :] = test_image[..., 6:9]
-        context[2*block_width:3*block_width, block_width: 2*block_width, :] = test_image[..., 9:12]
+        context[:block_width, block_width : 2 * block_width, :] = test_image[..., 3:6]
+        context[
+            block_width : 2 * block_width, 2 * block_width : 3 * block_width, :
+        ] = test_image[..., 6:9]
+        context[
+            2 * block_width : 3 * block_width, block_width : 2 * block_width, :
+        ] = test_image[..., 9:12]
 
         # Fill in the bottom right block with training label or reproduction
         ground_truth = context.copy()
@@ -249,20 +253,26 @@ def flood_generate(
     if seed is None:
         seed = tf.random.normal([num_generated_blocks, autoencoder.latent_dim_])
     elif seed.shape[0] < num_generated_blocks:
-        raise ValueError("Expected {} latent inputs, only got {}".format(num_generated_blocks, seed.shape[0]))
+        raise ValueError(
+            "Expected {} latent inputs, only got {}".format(
+                num_generated_blocks, seed.shape[0]
+            )
+        )
 
     # Generate every other block from noise
     latent_idx = 0
     for y in range(1, y_blocks + 1):
         for x in range(y % 2 + 1, x_blocks + 1, 2):
             padded_output_image[
-                y * block_width : (y+1) * block_width, x * block_width : (x+1) * block_width, :
+                y * block_width : (y + 1) * block_width,
+                x * block_width : (x + 1) * block_width,
+                :,
             ] = autoencoder.sample(tf.expand_dims(seed[latent_idx, :], axis=0))
             latent_idx += 1
 
     # Fill in the blanks
     for y in range(1, y_blocks + 1):
-        for x in range((y+1) % 2 + 1, x_blocks + 1, 2):
+        for x in range((y + 1) % 2 + 1, x_blocks + 1, 2):
             context_blocks = {
                 1: padded_output_image[
                     (y + 0) * block_width : (y + 1) * block_width,
@@ -285,10 +295,8 @@ def flood_generate(
                     :,
                 ],
             }
-            context = np.dstack([context_blocks[idx] for idx in (1,2,3,4)])
-            interpolated_block = autoencoder.call(
-                tf.expand_dims(context, axis=0)
-            )
+            context = np.dstack([context_blocks[idx] for idx in (1, 2, 3, 4)])
+            interpolated_block = autoencoder.call(tf.expand_dims(context, axis=0))
             padded_output_image[
                 (y + 0) * block_width : (y + 1) * block_width,
                 (x + 0) * block_width : (x + 1) * block_width,
@@ -297,7 +305,9 @@ def flood_generate(
 
     # Return image without padding
     return padded_output_image[
-        block_width : (y_blocks + 1) * block_width, block_width : (x_blocks + 1) * block_width, :
+        block_width : (y_blocks + 1) * block_width,
+        block_width : (x_blocks + 1) * block_width,
+        :,
     ]
 
 
@@ -811,7 +821,10 @@ def train(
         val_reproductions_dir := os.path.join(model_dir, "val_reproductions"),
         exist_ok=True,
     )
-    os.makedirs(flood_generations_dir := os.path.join(model_dir, "flood_generations"), exist_ok=True)
+    os.makedirs(
+        flood_generations_dir := os.path.join(model_dir, "flood_generations"),
+        exist_ok=True,
+    )
 
     # Set starting and end epoch according to whether we are continuing training
     epoch_log_file = os.path.join(model_dir, "epoch_log")
@@ -1053,7 +1066,9 @@ def train(
             tf.summary.image("reconstructed val images", val_reconstructed, step=epoch)
             tf.summary.image("generated images", generated, step=epoch)
             tf.summary.image(
-                "flood generated image", tf.expand_dims(flood_generated_image, axis=0), step=epoch
+                "flood generated image",
+                tf.expand_dims(flood_generated_image, axis=0),
+                step=epoch,
             )
 
         # Save the model every 15 epochs
