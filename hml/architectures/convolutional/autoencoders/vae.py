@@ -1,12 +1,12 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from hml.architectures.convolutional.decoders import avae_decoder
-from hml.architectures.convolutional.encoders import avae_encoder
+from hml.architectures.convolutional.decoders import avae_decoder, avae_decoder_256
+from hml.architectures.convolutional.encoders import avae_encoder, avae_encoder_256
 
 
-class AVAE(tf.keras.models.Model):
+class VAE(tf.keras.models.Model):
     """
     Autoencoder with architecture based on DCGAN paper
 
@@ -14,7 +14,9 @@ class AVAE(tf.keras.models.Model):
     is just a plain VAE
     """
 
-    def __init__(self, latent_dim: int = 100) -> "AVAE":
+    def __init__(
+        self, latent_dim: int = 100, input_shape: Tuple[int, int, int] = (64, 64, 3)
+    ) -> "VAE":
         """
         Construct the autoencoder
 
@@ -23,10 +25,13 @@ class AVAE(tf.keras.models.Model):
         """
         super().__init__()
         self.latent_dim_ = latent_dim
-        self.encoder_ = avae_encoder.model(latent_dim=self.latent_dim_)
+        self.input_shape_ = input_shape
+        self.encoder_ = avae_encoder.model(
+            latent_dim=self.latent_dim_, input_shape=self.input_shape_
+        )
         self.decoder_ = avae_decoder.model(latent_dim=self.latent_dim_)
 
-    def call(self, input_image: tf.Tensor, training: bool = True) -> tf.Tensor:
+    def call(self, input_image: tf.Tensor) -> tf.Tensor:
         """
         Run the model (for visualisation)
         """

@@ -12,33 +12,23 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             # Latent input
             layers.InputLayer(input_shape=(latent_dim,)),
             layers.Dense(
-                4 * 4 * 1024,
+                2 * 2 * 2048,
                 kernel_initializer=init,
             ),
-            layers.Reshape((4, 4, 1024)),
+            layers.Reshape((2, 2, 2048)),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            # Output shape: (2, 2, 4096)
+            layers.Conv2DTranspose(
+                1024,
+                kernel_size=5,
+                strides=2,
+                padding="same",
+                kernel_initializer=init,
+            ),
             layers.BatchNormalization(),
             layers.ReLU(),
             # Output shape: (4, 4, 1024)
-            # layers.Conv2DTranspose(
-            #     1024,
-            #     kernel_size=5,
-            #     strides=2,
-            #     padding="same",
-            #     kernel_initializer=init,
-            # ),
-            # layers.BatchNormalization(),
-            # layers.ReLU(),
-            # # Output shape: (2, 2, 1024)
-            # layers.Conv2DTranspose(
-            #     1024,
-            #     kernel_size=5,
-            #     strides=2,
-            #     padding="same",
-            #     kernel_initializer=init,
-            # ),
-            # layers.BatchNormalization(),
-            # layers.ReLU(),
-            # # Output shape: (4, 4, 1024)
             layers.Conv2DTranspose(
                 512,
                 kernel_size=5,
@@ -80,12 +70,33 @@ def model(latent_dim: int) -> tf.keras.Sequential:
             layers.ReLU(),
             # Output shape: (64, 64, 64)
             layers.Conv2DTranspose(
+                32,
+                kernel_size=5,
+                strides=2,
+                padding="same",
+                kernel_initializer=init,
+            ),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            # Output shape: (128, 128, 32)
+            layers.Conv2DTranspose(
+                16,
+                kernel_size=5,
+                strides=2,
+                padding="same",
+                kernel_initializer=init,
+            ),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            # Output shape: (256, 256, 16)
+            layers.Conv2DTranspose(
                 3,
                 kernel_size=1,
                 strides=1,
                 padding="same",
                 kernel_initializer=init,
             ),
+            # Output shape: (256, 256, 3)
         ]
     )
     architecture.build()

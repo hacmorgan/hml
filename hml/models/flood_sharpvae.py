@@ -13,13 +13,11 @@ from typing import Iterable, Dict, List, Optional, Tuple
 
 import argparse
 import datetime
+import math
 import os
 import subprocess
 import sys
-import threading
 import time
-
-# import tkinter
 
 import matplotlib
 
@@ -28,20 +26,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
 
-# import PIL.ImageTk
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow_io as tfio
 import tensorflow_datasets as tfds
 
-# import tensorflow_gan as tfgan
 
+from hml.architectures.convolutional.autoencoders.vae import VAE
 
-from hml.architectures.convolutional.autoencoders.avae import AVAE
-
-# from hml.architectures.convolutional.discriminators import avae_discriminator
-from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
-from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
+from hml.data_pipelines.unsupervised.pixel_art_flood import PixelArtFloodDataset
 
 
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
@@ -132,16 +125,39 @@ def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
 
 
 def reproduce_save_image(
-    test_images: tf.Tensor, reproductions: tf.Tensor, output_path: str
+    test_images: tf.Tensor,
+    test_labels: tf.Tensor,
+    reproductions: tf.Tensor,
+    output_path: str,
 ) -> None:
     """
     Regenerate some images and save to file.
-
-    This is done in a separate thread to avoid waiting for io.
     """
-    for i, (test_image, reproduction) in enumerate(zip(test_images, reproductions)):
+    block_width = test_images.shape[1]
+    for i, (test_image, test_label, reproduction) in enumerate(
+        zip(test_images, test_labels, reproductions)
+    ):
         plt.subplot(2, 4, i + 1)
-        stacked = tf.concat([test_image, reproduction], axis=0)
+
+        # Unstack training inputs into context blocks
+        context = np.zeros((3 * block_width, 3 * block_width, 3))
+        context[block_width : 2 * block_width, 0:block_width, :] = test_image[..., 0:3]
+        context[:block_width, block_width: 2*block_width, :] = test_image[..., 3:6]
+        context[block_width : 2 * block_width, block_width : 2 * block_width, :] = test_image[..., 6:9]
+        context[2*block_width:3*block_width, block_width: 2*block_width, :] = test_image[..., 9:12]
+
+        # Fill in the bottom right block with training label or reproduction
+        ground_truth = context.copy()
+        ground_truth[
+            block_width : 2 * block_width, block_width : 2 * block_width, :
+        ] = test_label
+        reproduced = context.copy()
+        reproduced[
+            block_width : 2 * block_width, block_width : 2 * block_width, :
+        ] = reproduction
+
+        # Stack both and save
+        stacked = tf.concat([ground_truth, reproduced], axis=0)
         rgb_image = np.array((stacked * 255.0)).astype(np.uint8)
         plt.imshow(rgb_image)
         plt.axis("off")
@@ -170,12 +186,13 @@ def show_reproduction_quality(
     autoencoder: tf.keras.models.Model,
     epoch: int,
     test_images: tf.Tensor,
+    test_labels: tf.Tensor,
     reproductions_dir: str,
 ) -> tf.Tensor:
     """
     Generate and save images
     """
-    reproductions = autoencoder.call(test_images, training=False)
+    reproductions = autoencoder.call(test_images)
     print(f"{np.mean(reproductions)=}, {np.std(reproductions)=}")
     print(f"{np.mean(test_images)=}, {np.std(test_images)=}")
     output_path = os.path.join(
@@ -184,8 +201,104 @@ def show_reproduction_quality(
     # threading.Thread(
     #     target=reproduce_save_image, args=(test_images, reproductions, output_path)
     # ).start()
-    reproduce_save_image(test_images, reproductions, output_path)
+    reproduce_save_image(test_images, test_labels, reproductions, output_path)
     return reproductions
+
+
+def save_flood_generated_image(image: np.ndarray, output_dir: str, epoch: int) -> None:
+    """
+    Save an image
+    """
+    plt.subplot(1, 1, 1)
+    plt.imshow(image)
+    plt.axis("off")
+    output_path = os.path.join(output_dir, f"flood_generation_at_epoch_{epoch:04d}.png")
+    plt.savefig(output_path, dpi=250)
+
+
+def flood_generate(
+    autoencoder: tf.keras.models.Model,
+    seed: Optional[tf.Tensor] = None,
+    shape: Tuple[int, int] = (4, 4),
+) -> tf.Tensor:
+    """
+    Flood-fill a large image by autogenerating the every other block (like a
+    checkerboard), then interpolating the remaining blocks from context
+
+    Args:
+        autoencoder: Autoencoder model
+        seed: Random normal noise as input to decoder, of shape (num_blocks_to_generate, latent_dim)
+        shape: Desired shape (in blocks) of output image
+
+    Returns:
+        Generated image
+    """
+    # Unpack relevant shapes
+    y_blocks, x_blocks = shape
+    block_width = autoencoder.input_shape_[1]
+
+    # Make blank (0s) canvas, padded
+    padded_output_image = np.zeros(
+        ((shape[0] + 2) * block_width, (shape[1] + 2) * block_width, 3)
+    )
+
+    # Calculate how many blocks we need to generate from noise
+    num_generated_blocks = math.ceil(x_blocks * y_blocks / 2)
+
+    # Generate input noise or verify we have enough if passed as arg
+    if seed is None:
+        seed = tf.random.normal([num_generated_blocks, autoencoder.latent_dim_])
+    elif seed.shape[0] < num_generated_blocks:
+        raise ValueError("Expected {} latent inputs, only got {}".format(num_generated_blocks, seed.shape[0]))
+
+    # Generate every other block from noise
+    latent_idx = 0
+    for y in range(1, y_blocks + 1):
+        for x in range(y % 2 + 1, x_blocks + 1, 2):
+            padded_output_image[
+                y * block_width : (y+1) * block_width, x * block_width : (x+1) * block_width, :
+            ] = autoencoder.sample(tf.expand_dims(seed[latent_idx, :], axis=0))
+            latent_idx += 1
+
+    # Fill in the blanks
+    for y in range(1, y_blocks + 1):
+        for x in range((y+1) % 2 + 1, x_blocks + 1, 2):
+            context_blocks = {
+                1: padded_output_image[
+                    (y + 0) * block_width : (y + 1) * block_width,
+                    (x - 1) * block_width : (x + 0) * block_width,
+                    :,
+                ],
+                2: padded_output_image[
+                    (y - 1) * block_width : (y + 0) * block_width,
+                    (x + 0) * block_width : (x + 1) * block_width,
+                    :,
+                ],
+                3: padded_output_image[
+                    (y + 0) * block_width : (y + 1) * block_width,
+                    (x + 1) * block_width : (x + 2) * block_width,
+                    :,
+                ],
+                4: padded_output_image[
+                    (y + 1) * block_width : (y + 2) * block_width,
+                    (x + 0) * block_width : (x + 1) * block_width,
+                    :,
+                ],
+            }
+            context = np.dstack([context_blocks[idx] for idx in (1,2,3,4)])
+            interpolated_block = autoencoder.call(
+                tf.expand_dims(context, axis=0)
+            )
+            padded_output_image[
+                (y + 0) * block_width : (y + 1) * block_width,
+                (x + 0) * block_width : (x + 1) * block_width,
+                :,
+            ] = interpolated_block
+
+    # Return image without padding
+    return padded_output_image[
+        block_width : (y_blocks + 1) * block_width, block_width : (x_blocks + 1) * block_width, :
+    ]
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
@@ -217,7 +330,8 @@ def variance_of_laplacian(images: tf.Tensor, ksize: int = 7) -> float:
 def compute_vae_loss(
     vae: tf.keras.models.Model,
     # discriminator: tf.keras.Sequential,
-    x: tf.Tensor,
+    images: tf.Tensor,
+    labels: tf.Tensor,
     alpha: float = 1e0,
     beta: float = 0e0,
     gamma: float = 0e0,
@@ -231,7 +345,8 @@ def compute_vae_loss(
         vae: VAE model - should have encode(), decode(), reparameterize(), and sample()
              methods
         discriminator: The discriminator model
-        x: Minibatch of training images
+        images: Minibatch of training images
+        labels: Minibatch of training labels
         alpha: Contribution of KL divergence loss to total loss
         beta: Contribution of discriminator loss on reconstructed images to total loss
         gamma: Contribution of discriminator loss on generated images to total loss
@@ -248,7 +363,7 @@ def compute_vae_loss(
         Generated images (used again to compute loss for training discriminator)
     """
     # Reconstruct a real image
-    mean, logvar = vae.encode(x)
+    mean, logvar = vae.encode(images)
     z = vae.reparameterize(mean, logvar)
     x_logit = vae.decode(z)
     reconstructed = vae.sample(z)
@@ -258,7 +373,7 @@ def compute_vae_loss(
     generated = vae.sample(z_gen)
 
     # Compute KL divergence loss
-    cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
+    cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=labels)
     logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
     logpz = log_normal_pdf(z, 0.0, 0.0)
     logqz_x = log_normal_pdf(z, mean, logvar)
@@ -306,7 +421,7 @@ def compute_vae_loss(
 
 def compute_discriminator_loss(
     discriminator: tf.keras.models.Model,
-    x: tf.Tensor,
+    images: tf.Tensor,
     reconstructed: tf.Tensor,
     generated: tf.Tensor,
     beta: float = 0e0,
@@ -317,7 +432,7 @@ def compute_discriminator_loss(
 
     Args:
         discriminator: Discriminator model
-        x: Training images
+        images: Training images
         reconstructed: Reconstructions of training images by autoencoder
         generated: Fake images generated by autoencoder
         beta: Contribution of loss on reconstructed images to total loss
@@ -330,7 +445,7 @@ def compute_discriminator_loss(
         Loss on generated images
     """
     # Run real images, reconstructed images, and fake images through discriminator
-    real_output = discriminator(x)
+    real_output = discriminator(images)
     reconstructed_output = discriminator(reconstructed)
     generated_output = discriminator(generated)
 
@@ -346,7 +461,8 @@ def compute_discriminator_loss(
 
 @tf.function
 def train_step(
-    images,
+    images: tf.Tensor,
+    labels: tf.Tensor,
     autoencoder: tf.keras.models.Model,
     # discriminator: tf.keras.models.Model,
     autoencoder_optimizer: "Optimizer",
@@ -385,6 +501,7 @@ def train_step(
             autoencoder,
             # discriminator,
             images,
+            labels,
         )
         # (
         #     discriminator_loss,
@@ -431,7 +548,11 @@ def train_step(
 
 
 def compute_mse_losses(
-    autoencoder: tf.keras.models.Model, train_images: tf.Tensor, val_images: tf.Tensor
+    autoencoder: tf.keras.models.Model,
+    train_images: tf.Tensor,
+    train_labels: tf.Tensor,
+    val_images: tf.Tensor,
+    val_labels: tf.Tensor,
 ) -> Tuple[float, float]:
     """
     Compute loss on training and validation data.
@@ -441,10 +562,10 @@ def compute_mse_losses(
         train_images: Batch of training data
         val_images: Batch of validation data
     """
-    reproduced_train_images = autoencoder.call(train_images, training=False)
-    reproduced_val_images = autoencoder.call(val_images, training=False)
-    train_loss = mse(train_images, reproduced_train_images)
-    val_loss = mse(val_images, reproduced_val_images)
+    reproduced_train_images = autoencoder.call(train_images)
+    reproduced_val_images = autoencoder.call(val_images)
+    train_loss = mse(train_labels, reproduced_train_images)
+    val_loss = mse(val_labels, reproduced_val_images)
     return train_loss, val_loss
 
 
@@ -588,10 +709,13 @@ def train(
     # Pixel Art dataset
     train_images = (
         tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(
+            PixelArtFloodDataset(
                 dataset_path=dataset_path, crop_shape=train_crop_shape
             ),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            output_signature=(
+                tf.TensorSpec(shape=train_crop_shape[0:2] + (12,), dtype=tf.float32),
+                tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            ),
         )
         .shuffle(buffer_size)
         .batch(batch_size)
@@ -600,8 +724,11 @@ def train(
     )
     val_images = (
         tf.data.Dataset.from_generator(
-            PixelArtSigmoidDataset(dataset_path=val_path, crop_shape=train_crop_shape),
-            output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            PixelArtFloodDataset(dataset_path=val_path, crop_shape=train_crop_shape),
+            output_signature=(
+                tf.TensorSpec(shape=train_crop_shape[0:2] + (12,), dtype=tf.float32),
+                tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
+            ),
         )
         .shuffle(buffer_size)
         .batch(batch_size)
@@ -668,9 +795,9 @@ def train(
     # )
 
     # Save a few images for visualisation
-    train_test_image_batch = next(iter(train_images))
+    train_test_image_batch, train_test_label_batch = next(iter(train_images))
     train_test_images = train_test_image_batch[:8, ...]
-    val_test_image_batch = next(iter(val_images))
+    val_test_image_batch, val_test_label_batch = next(iter(val_images))
     val_test_images = val_test_image_batch[:8, ...]
 
     print(train_test_images[0])
@@ -684,6 +811,7 @@ def train(
         val_reproductions_dir := os.path.join(model_dir, "val_reproductions"),
         exist_ok=True,
     )
+    os.makedirs(flood_generations_dir := os.path.join(model_dir, "flood_generations"), exist_ok=True)
 
     # Set starting and end epoch according to whether we are continuing training
     epoch_log_file = os.path.join(model_dir, "epoch_log")
@@ -740,10 +868,11 @@ def train(
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
 
-        for step, image_batch in enumerate(train_images):
+        for step, (image_batch, label_batch) in enumerate(train_images):
             # Perform training step
             train_step(
                 images=image_batch,
+                labels=label_batch,
                 autoencoder=autoencoder,
                 # discriminator=discriminator,
                 autoencoder_optimizer=autoencoder_optimizer,
@@ -783,17 +912,37 @@ def train(
         # Produce demo output every epoch the generator trains
         generated = generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
 
+        # Flood generate a bigger image
+        flood_generated_image = flood_generate(autoencoder, seed)
+        save_flood_generated_image(
+            flood_generated_image,
+            output_dir=flood_generations_dir,
+            epoch=epoch,
+        )
+
         # Show some examples of how the model reconstructs its inputs.
         train_reconstructed = show_reproduction_quality(
-            autoencoder, epoch + 1, train_test_images, reproductions_dir
+            autoencoder,
+            epoch + 1,
+            train_test_images,
+            train_test_label_batch,
+            reproductions_dir,
         )
         val_reconstructed = show_reproduction_quality(
-            autoencoder, epoch + 1, val_test_images, val_reproductions_dir
+            autoencoder,
+            epoch + 1,
+            val_test_images,
+            val_test_label_batch,
+            val_reproductions_dir,
         )
 
         # Compute loss on training and validation data
         train_loss, val_loss = compute_mse_losses(
-            autoencoder, train_test_image_batch, val_test_image_batch
+            autoencoder,
+            train_test_image_batch,
+            train_test_label_batch,
+            val_test_image_batch,
+            val_test_label_batch,
         )
 
         # Get sample of encoder output
@@ -903,6 +1052,9 @@ def train(
             )
             tf.summary.image("reconstructed val images", val_reconstructed, step=epoch)
             tf.summary.image("generated images", generated, step=epoch)
+            tf.summary.image(
+                "flood generated image", tf.expand_dims(flood_generated_image, axis=0), step=epoch
+            )
 
         # Save the model every 15 epochs
         if (epoch + 1) % 15 == 0:
@@ -954,6 +1106,7 @@ def generate(
     latent_dim: int = 50,
     save_output: bool = False,
     sample: bool = True,
+    flood_shape: Optional[Tuple[int, int]] = None,
 ) -> None:
     """
     Generate some pixel art
@@ -963,16 +1116,23 @@ def generate(
         generator_input: Path to a 10x10 grayscale image to use as input. Random noise
                          used if not given.
         save_output: Save images instead of displaying
+        sample: Apply sigmoid to decoder output if true, return logits othverwise
+        flood_shape: If given, flood generate an image of given shape (in blocks)
+                     instead of generating a single block from noise.
     """
     if decoder_input is not None:
         input_raw = tf.io.read_file(decoder_input)
         input_decoded = tf.image.decode_image(input_raw)
-        latent_input = tf.reshape(input_decoded, [10, latent_dim])
+        latent_input = tf.reshape(input_decoded, [1, latent_dim])
     else:
-        latent_input = tf.random.normal([10, latent_dim])
+        latent_input = tf.random.normal([1, latent_dim])
     i = 0
     while True:
-        if sample:
+        if flood_shape is not None:
+            output = tf.expand_dims(
+                flood_generate(autoencoder, seed=latent_input), axis=0
+            )
+        elif sample:
             output = autoencoder.sample(latent_input)
         else:
             output = autoencoder.decoder_(latent_input, training=False)
@@ -988,7 +1148,7 @@ def generate(
             i += 1
         else:
             plt.show()
-        latent_input = tf.random.normal([10, latent_dim])
+        latent_input = tf.random.normal([1, latent_dim])
 
 
 def regenerate_images(slider_value: Optional[float] = None) -> None:
@@ -1095,6 +1255,7 @@ def main(
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
     save_generator_output: bool = False,
+    flood_generate_shape: Optional[Tuple[int, int]] = None,
     debug: bool = False,
     sample: bool = True,
 ) -> None:
@@ -1119,9 +1280,9 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    # STEPS_PER_EPOCH = 780  # Cats - minibatch size 32
-    # STEPS_PER_EPOCH = 390  # Cats - minibatch size 64
-    STEPS_PER_EPOCH = 195  # Cats - minibatch size 128
+    # STEPS_PER_EPOCH = 225  # pixel_art - minibatch size 128
+    # STEPS_PER_EPOCH = 600  # expanded pixel_art - minibatch size 128
+    STEPS_PER_EPOCH = 665  # expanded pixel_art - minibatch size 128 - checkerboard
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
@@ -1131,7 +1292,7 @@ def main(
     lr = LRS(
         max_lr=1e-4,
         min_lr=5e-6,
-        start_decay_epoch=0,
+        start_decay_epoch=50,
         stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
@@ -1142,7 +1303,7 @@ def main(
     #     step_size=3 * STEPS_PER_EPOCH,
     # )
 
-    autoencoder = AVAE(latent_dim=latent_dim)
+    autoencoder = VAE(latent_dim=latent_dim, input_shape=train_crop_shape[:2] + (12,))
     # discriminator = avae_discriminator.model(latent_dim=latent_dim)
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
@@ -1192,6 +1353,7 @@ def main(
         generate(
             autoencoder=autoencoder,
             decoder_input=decoder_input,
+            flood_shape=flood_generate_shape,
             latent_dim=latent_dim,
             save_output=save_generator_output,
             sample=sample,
@@ -1233,6 +1395,12 @@ def get_args() -> argparse.Namespace:
         "-e",
         action="store_true",
         help="Don't check git status, current test is just for debugging",
+    )
+    parser.add_argument(
+        "--flood-generate-shape",
+        "-f",
+        type=str,
+        help="Dimensions (in blocks) of flood generated image, e.g. '4,4'",
     )
     parser.add_argument(
         "--generator-input",
@@ -1289,6 +1457,11 @@ def cli_main(args: argparse.Namespace) -> int:
         ),
         dataset_path=args.dataset,
         debug=args.debug,
+        flood_generate_shape=tuple(
+            int(dim) for dim in args.flood_generate_shape.strip().split(",")
+        )
+        if args.flood_generate_shape is not None
+        else None,
         val_path=args.validation_dataset,
         continue_from_checkpoint=args.checkpoint,
         decoder_input=args.generator_input,
