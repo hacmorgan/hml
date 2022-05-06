@@ -37,7 +37,7 @@ def pad_image(image: np.ndarray, pad_width: int) -> np.ndarray:
         Padded input image
     """
     height, width, channels = image.shape
-    padded_image_shape = (height + pad_width, width + pad_width, channels)
+    padded_image_shape = (height + 2 * pad_width, width + 2 * pad_width, channels)
     padded_image = np.zeros(shape=padded_image_shape, dtype=image.dtype)
     padded_image[
         pad_width : pad_width + height, pad_width : pad_width + width, :
@@ -62,22 +62,22 @@ def pad_and_yield_crops(
     function.
 
     For a 3-channel image as in the diagram below, one training input yielded will be
-    the context blocks, stacked as (1, 2, 3) to form a 9-channel raster, and the label
-    will be block 4.
+    the context blocks, stacked as (1, 2, 3, 4) to form a 12-channel raster, and the
+    label will be block 0.
 
-    Horizontal flipping is also available, where additionally, blocks (5, 4, 3) will be
+    Horizontal flipping is also available, where blocks (3, 2, 1, 4) will be
     stacked and horizontally flipped as a training input, with block 0 horizontally
     flipped as the label.
 
     Blocks labelled ':' designate the remaining blocks in the image.
 
-    ---------
-    |2|3|4|:|
-    ---------
-    |1|0|5|:|
-    ---------
-    |:|:|:|:|
-    ---------
+    -----------
+    |:|:|2|:|:|
+    -----------
+    |:|1|0|3|:|
+    -----------
+    |:|:|4|:|:|
+    -----------
 
     Args:
         image: Image to make crops from
@@ -88,38 +88,39 @@ def pad_and_yield_crops(
         Input context blocks, stacked (training data)
         Desired output block (label)
     """
-    (image_height, image_width, _) = image.shape
+    # Get image and crop shape
+    (unpadded_image_height, unpadded_image_width, _) = image.shape
     _, crop_width, _ = shape
+
+    # Pad image with zeros
     image_padded = pad_image(image, pad_width=crop_width)
-    first_block = True
-    for x in range(crop_width, image_width - crop_width, crop_width):
-        for y in range(crop_width, image_height - crop_width, crop_width):
-            # Skip first block, we have no good context
-            if first_block:
-                first_block = False
-                continue
+
+    # Iterate through each block 0 in the image (not in padded area)
+    for x in range(crop_width, unpadded_image_width, crop_width):
+        for y in range(crop_width, unpadded_image_height, crop_width):
+
+            # Extract a reference to each block
             blocks = {
                 0: image_padded[y : y + crop_width, x : x + crop_width, :],
                 1: image_padded[y : y + crop_width, x - crop_width : x, :],
-                2: image_padded[y - crop_width : y, x - crop_width : x, :],
-                3: image_padded[y - crop_width : y, x : x + crop_width, :],
+                2: image_padded[y - crop_width : y, x : x + crop_width, :],
+                3: image_padded[y : y + crop_width, x + crop_width : x + 2 * crop_width, :],
                 4: image_padded[
-                    y - crop_width : y, x + crop_width : x + 2 * crop_width, :
-                ],
-                5: image_padded[
-                    y : y + crop_width, x + crop_width : x + 2 * crop_width, :
+                    y + crop_width : y + 2 * crop_width, x : x + crop_width, :
                 ],
             }
-            outputs = [[np.dstack([blocks[idx] for idx in (1, 2, 3)]), blocks[0]]]
+
+            # Stack blocks 
+            outputs = [(np.dstack([blocks[idx] for idx in (1, 2, 3, 4)]), blocks[0])]
             if flip_x:
                 outputs.append(
-                    [
+                    tuple(
                         np.fliplr(array)
-                        for array in [
-                            np.dstack([blocks[idx] for idx in (5, 4, 3)]),
+                        for array in (
+                            np.dstack([blocks[idx] for idx in (3, 2, 1, 4)]),
                             blocks[0],
-                        ]
-                    ]
+                        )
+                    )
                 )
             yield from (
                 tuple(normalise(raster) for raster in (train_input, label))

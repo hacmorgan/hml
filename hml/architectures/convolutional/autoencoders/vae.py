@@ -31,7 +31,7 @@ class VAE(tf.keras.models.Model):
         )
         self.decoder_ = avae_decoder.model(latent_dim=self.latent_dim_)
 
-    def call(self, input_image: tf.Tensor, training: bool = True) -> tf.Tensor:
+    def call(self, input_image: tf.Tensor) -> tf.Tensor:
         """
         Run the model (for visualisation)
         """
