@@ -1281,7 +1281,8 @@ def main(
         save_generator_output: Save generated images instead of displaying
     """
     # STEPS_PER_EPOCH = 225  # pixel_art - minibatch size 128
-    STEPS_PER_EPOCH = 600  # expanded pixel_art - minibatch size 128
+    # STEPS_PER_EPOCH = 600  # expanded pixel_art - minibatch size 128
+    STEPS_PER_EPOCH = 665  # expanded pixel_art - minibatch size 128 - checkerboard
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
