@@ -718,7 +718,9 @@ def train(
     )
     val_images = (
         tf.data.Dataset.from_generator(
-            PixelArtFloodDataset(dataset_path=val_path, crop_shape=train_crop_shape, flip_x=False),
+            PixelArtFloodDataset(
+                dataset_path=val_path, crop_shape=train_crop_shape, flip_x=False
+            ),
             output_signature=(
                 tf.TensorSpec(shape=context_shape, dtype=tf.float32),
                 tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),

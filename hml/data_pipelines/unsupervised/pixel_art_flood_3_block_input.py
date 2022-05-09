@@ -102,13 +102,27 @@ def pad_and_yield_crops(
             # Extract centre block (label)
             centre_block = image_padded[y : y + crop_width, x : x + crop_width, :]
 
-            # Extract the 3x3 block context region, replace centre block with zeros
+            # Extract the 3x3 block context region
             context_blocks = image_padded[
                 y - crop_width : y + 2 * crop_width,
                 x - crop_width : x + 2 * crop_width,
                 :,
             ].copy()
-            context_blocks[y : y + crop_width, x : x + crop_width, :] = 0
+
+            # Set corner blocks and centre to 0
+            context_blocks[y : y + crop_width, x : x + crop_width, :] = 0  # Centre
+            context_blocks[y - crop_width : y, x - crop_width : x, :] = 0  # Top left
+            context_blocks[
+                y - crop_width : y, x + crop_width : x + 2 * crop_width, :
+            ] = 0  # Top right
+            context_blocks[
+                y + crop_width : y + 2 * crop_width,
+                x + crop_width : x + 2 * crop_width,
+                :,
+            ] = 0  # Bottom right
+            context_blocks[
+                y + crop_width : y + 2 * crop_width, x - crop_width : x, :
+            ] = 0  # Bottom left
 
             # Assemble results
             outputs = [(context_blocks, centre_block)]
