@@ -3,7 +3,11 @@ from typing import Optional, Tuple
 import tensorflow as tf
 
 from hml.architectures.convolutional.decoders import avae_decoder, avae_decoder_256
-from hml.architectures.convolutional.encoders import avae_encoder, avae_encoder_256
+from hml.architectures.convolutional.encoders import (
+    avae_encoder,
+    avae_encoder_256,
+    sharpvae_encoder_3_block_input,
+)
 
 
 class VAE(tf.keras.models.Model):
@@ -26,8 +30,8 @@ class VAE(tf.keras.models.Model):
         super().__init__()
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
-        self.encoder_ = avae_encoder.model(
-            latent_dim=self.latent_dim_, input_shape=self.input_shape_
+        self.encoder_ = sharpvae_encoder_3_block_input.model(
+            latent_dim=self.latent_dim_
         )
         self.decoder_ = avae_decoder.model(latent_dim=self.latent_dim_)
 

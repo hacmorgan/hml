@@ -34,7 +34,10 @@ import tensorflow_datasets as tfds
 
 from hml.architectures.convolutional.autoencoders.vae import VAE
 
-from hml.data_pipelines.unsupervised.pixel_art_flood import PixelArtFloodDataset
+# from hml.data_pipelines.unsupervised.pixel_art_flood import PixelArtFloodDataset
+from hml.data_pipelines.unsupervised.pixel_art_flood_3_block_input import (
+    PixelArtFloodDataset,
+)
 
 
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
@@ -133,25 +136,18 @@ def reproduce_save_image(
     """
     Regenerate some images and save to file.
     """
-    block_width = test_images.shape[1]
+    block_width = int(test_images.shape[1] / 3)
+    outputs = np.zeros((8, test_images.shape[1] * 2) + test_images.shape[2:])
     for i, (test_image, test_label, reproduction) in enumerate(
         zip(test_images, test_labels, reproductions)
     ):
         plt.subplot(2, 4, i + 1)
 
         # Unstack training inputs into context blocks
-        context = np.zeros((3 * block_width, 3 * block_width, 3))
-        context[block_width : 2 * block_width, 0:block_width, :] = test_image[..., 0:3]
-        context[:block_width, block_width : 2 * block_width, :] = test_image[..., 3:6]
-        context[
-            block_width : 2 * block_width, 2 * block_width : 3 * block_width, :
-        ] = test_image[..., 6:9]
-        context[
-            2 * block_width : 3 * block_width, block_width : 2 * block_width, :
-        ] = test_image[..., 9:12]
+        context = test_image.numpy()
 
-        # Fill in the bottom right block with training label or reproduction
-        ground_truth = context.copy()
+        # Fill in the centre block with training label or reproduction
+        ground_truth = context.copy()  # tf.identity similar to array.copy()
         ground_truth[
             block_width : 2 * block_width, block_width : 2 * block_width, :
         ] = test_label
@@ -161,11 +157,14 @@ def reproduce_save_image(
         ] = reproduction
 
         # Stack both and save
-        stacked = tf.concat([ground_truth, reproduced], axis=0)
+        stacked = np.vstack([ground_truth, reproduced])
+        outputs[i, ...] = stacked
+
         rgb_image = np.array((stacked * 255.0)).astype(np.uint8)
         plt.imshow(rgb_image)
         plt.axis("off")
     plt.savefig(output_path, dpi=250)
+    return outputs
 
 
 def generate_and_save_images(
@@ -205,8 +204,9 @@ def show_reproduction_quality(
     # threading.Thread(
     #     target=reproduce_save_image, args=(test_images, reproductions, output_path)
     # ).start()
-    reproduce_save_image(test_images, test_labels, reproductions, output_path)
-    return reproductions
+    outputs = reproduce_save_image(test_images, test_labels, reproductions, output_path)
+    # return tf.concat([test_labels[:8, ...], reproductions], axis=1)
+    return outputs
 
 
 def save_flood_generated_image(image: np.ndarray, output_dir: str, epoch: int) -> None:
@@ -273,29 +273,11 @@ def flood_generate(
     # Fill in the blanks
     for y in range(1, y_blocks + 1):
         for x in range((y + 1) % 2 + 1, x_blocks + 1, 2):
-            context_blocks = {
-                1: padded_output_image[
-                    (y + 0) * block_width : (y + 1) * block_width,
-                    (x - 1) * block_width : (x + 0) * block_width,
-                    :,
-                ],
-                2: padded_output_image[
-                    (y - 1) * block_width : (y + 0) * block_width,
-                    (x + 0) * block_width : (x + 1) * block_width,
-                    :,
-                ],
-                3: padded_output_image[
-                    (y + 0) * block_width : (y + 1) * block_width,
-                    (x + 1) * block_width : (x + 2) * block_width,
-                    :,
-                ],
-                4: padded_output_image[
-                    (y + 1) * block_width : (y + 2) * block_width,
-                    (x + 0) * block_width : (x + 1) * block_width,
-                    :,
-                ],
-            }
-            context = np.dstack([context_blocks[idx] for idx in (1, 2, 3, 4)])
+            context = padded_output_image[
+                (y - 1) * block_width : (y + 2) * block_width,
+                (x - 1) * block_width : (x + 2) * block_width,
+                :,
+            ]
             interpolated_block = autoencoder.call(tf.expand_dims(context, axis=0))
             padded_output_image[
                 (y + 0) * block_width : (y + 1) * block_width,
@@ -714,7 +696,9 @@ def train(
         os.makedirs(model_dir, exist_ok=True)
         write_commit_hash_to_model_dir(model_dir)
 
-    # Instantiate train and val datasets
+    # Shape of 3x3 blocks context region
+    rows, cols, channels = train_crop_shape
+    context_shape = (rows * 3, cols * 3, channels)
 
     # Pixel Art dataset
     train_images = (
@@ -723,7 +707,7 @@ def train(
                 dataset_path=dataset_path, crop_shape=train_crop_shape
             ),
             output_signature=(
-                tf.TensorSpec(shape=train_crop_shape[0:2] + (12,), dtype=tf.float32),
+                tf.TensorSpec(shape=context_shape, dtype=tf.float32),
                 tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
             ),
         )
@@ -736,7 +720,7 @@ def train(
         tf.data.Dataset.from_generator(
             PixelArtFloodDataset(dataset_path=val_path, crop_shape=train_crop_shape),
             output_signature=(
-                tf.TensorSpec(shape=train_crop_shape[0:2] + (12,), dtype=tf.float32),
+                tf.TensorSpec(shape=context_shape, dtype=tf.float32),
                 tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
             ),
         )
@@ -1306,7 +1290,7 @@ def main(
     # )
     lr = LRS(
         max_lr=1e-4,
-        min_lr=5e-6,
+        min_lr=1e-5,
         start_decay_epoch=50,
         stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
