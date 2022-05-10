@@ -1124,14 +1124,14 @@ def generate(
     if decoder_input is not None:
         input_raw = tf.io.read_file(decoder_input)
         input_decoded = tf.image.decode_image(input_raw)
-        latent_input = tf.reshape(input_decoded, [1, latent_dim])
+        latent_input = tf.reshape(input_decoded, [200, latent_dim])
     else:
-        latent_input = tf.random.normal([1, latent_dim])
+        latent_input = tf.random.normal([200, latent_dim])
     i = 0
     while True:
         if flood_shape is not None:
             output = tf.expand_dims(
-                flood_generate(autoencoder, seed=latent_input), axis=0
+                flood_generate(autoencoder, seed=latent_input, shape=flood_shape), axis=0
             )
         elif sample:
             output = autoencoder.sample(latent_input)
@@ -1149,7 +1149,7 @@ def generate(
             i += 1
         else:
             plt.show()
-        latent_input = tf.random.normal([1, latent_dim])
+        latent_input = tf.random.normal([200, latent_dim])
 
 
 def regenerate_images(slider_value: Optional[float] = None) -> None:
