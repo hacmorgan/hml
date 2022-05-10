@@ -282,10 +282,10 @@ def flood_generate(
             ]
 
             # Set the corners to 0s, to match how the network was trained
-            context[:block_width, :block_width, : = 0]  # Top left
-            context[2*block_width:3*block_width, :block_width, : = 0]  # Bottom left
-            context[2*block_width:3*block_width, 2*block_width:3*block_width, : = 0]  # Bottom right
-            context[:block_width, 2*block_width:3*block_width, : = 0]  # Top right
+            context[:block_width, :block_width, :] = 0  # Top left
+            context[2*block_width:3*block_width, :block_width, :] = 0  # Bottom left
+            context[2*block_width:3*block_width, 2*block_width:3*block_width, :] = 0  # Bottom right
+            context[:block_width, 2*block_width:3*block_width, :] = 0  # Top right
 
             # Generate centre from context
             interpolated_block = autoencoder.call(tf.expand_dims(context, axis=0))
