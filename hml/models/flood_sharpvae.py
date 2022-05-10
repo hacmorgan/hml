@@ -273,12 +273,24 @@ def flood_generate(
     # Fill in the blanks
     for y in range(1, y_blocks + 1):
         for x in range((y + 1) % 2 + 1, x_blocks + 1, 2):
+
+            # Extract 3x3 context block
             context = padded_output_image[
                 (y - 1) * block_width : (y + 2) * block_width,
                 (x - 1) * block_width : (x + 2) * block_width,
                 :,
             ]
+
+            # Set the corners to 0s, to match how the network was trained
+            context[:block_width, :block_width, : = 0]  # Top left
+            context[2*block_width:3*block_width, :block_width, : = 0]  # Bottom left
+            context[2*block_width:3*block_width, 2*block_width:3*block_width, : = 0]  # Bottom right
+            context[:block_width, 2*block_width:3*block_width, : = 0]  # Top right
+
+            # Generate centre from context
             interpolated_block = autoencoder.call(tf.expand_dims(context, axis=0))
+
+            # Insert block back into flood image
             padded_output_image[
                 (y + 0) * block_width : (y + 1) * block_width,
                 (x + 0) * block_width : (x + 1) * block_width,
