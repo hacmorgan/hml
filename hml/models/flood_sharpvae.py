@@ -33,11 +33,15 @@ import tensorflow_datasets as tfds
 
 
 from hml.architectures.convolutional.autoencoders.vae import VAE
-
-# from hml.data_pipelines.unsupervised.pixel_art_flood import PixelArtFloodDataset
-from hml.data_pipelines.unsupervised.pixel_art_flood_3_block_input import (
-    PixelArtFloodDataset,
+from hml.architectures.convolutional.discriminators.avae_discriminator import (
+    model as discriminator_model,
 )
+
+from hml.data_pipelines.unsupervised.pixel_art_flood import PixelArtFloodDataset
+
+# from hml.data_pipelines.unsupervised.pixel_art_flood_3_block_input import (
+#     PixelArtFloodDataset,
+# )
 
 
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
@@ -48,6 +52,7 @@ KL loss:                       {kl_loss:>6.4f}
 Reconstruction sharpness loss: {reconstruction_sharpness_loss:>6.4f}
 Generation sharpness loss:     {generation_sharpness_loss:>6.4f}
 Total loss:                    {vae_loss:>6.4f}
+Discriminator loss:            {discriminator_loss:>6.4f}
 """
 # Discriminator loss: {discriminator_loss}
 
@@ -136,18 +141,26 @@ def reproduce_save_image(
     """
     Regenerate some images and save to file.
     """
-    block_width = int(test_images.shape[1] / 3)
-    outputs = np.zeros((8, test_images.shape[1] * 2) + test_images.shape[2:])
+    block_width = int(test_images.shape[1])
+    outputs = np.zeros((8, test_images.shape[1] * 2 * 3, test_images.shape[2] * 3, 3))
     for i, (test_image, test_label, reproduction) in enumerate(
         zip(test_images, test_labels, reproductions)
     ):
         plt.subplot(2, 4, i + 1)
 
         # Unstack training inputs into context blocks
-        context = test_image.numpy()
+        context = np.zeros((3 * block_width, 3 * block_width, 3))
+        context[block_width : 2 * block_width, 0:block_width, :] = test_image[..., 0:3]
+        context[:block_width, block_width : 2 * block_width, :] = test_image[..., 3:6]
+        context[
+            block_width : 2 * block_width, 2 * block_width : 3 * block_width, :
+        ] = test_image[..., 6:9]
+        context[
+            2 * block_width : 3 * block_width, block_width : 2 * block_width, :
+        ] = test_image[..., 9:12]
 
-        # Fill in the centre block with training label or reproduction
-        ground_truth = context.copy()  # tf.identity similar to array.copy()
+        # Fill in the bottom right block with training label or reproduction
+        ground_truth = context.copy()
         ground_truth[
             block_width : 2 * block_width, block_width : 2 * block_width, :
         ] = test_label
@@ -273,24 +286,30 @@ def flood_generate(
     # Fill in the blanks
     for y in range(1, y_blocks + 1):
         for x in range((y + 1) % 2 + 1, x_blocks + 1, 2):
-
-            # Extract 3x3 context block
-            context = padded_output_image[
-                (y - 1) * block_width : (y + 2) * block_width,
-                (x - 1) * block_width : (x + 2) * block_width,
-                :,
-            ]
-
-            # Set the corners to 0s, to match how the network was trained
-            context[:block_width, :block_width, :] = 0  # Top left
-            context[2*block_width:3*block_width, :block_width, :] = 0  # Bottom left
-            context[2*block_width:3*block_width, 2*block_width:3*block_width, :] = 0  # Bottom right
-            context[:block_width, 2*block_width:3*block_width, :] = 0  # Top right
-
-            # Generate centre from context
+            context_blocks = {
+                1: padded_output_image[
+                    (y + 0) * block_width : (y + 1) * block_width,
+                    (x - 1) * block_width : (x + 0) * block_width,
+                    :,
+                ],
+                2: padded_output_image[
+                    (y - 1) * block_width : (y + 0) * block_width,
+                    (x + 0) * block_width : (x + 1) * block_width,
+                    :,
+                ],
+                3: padded_output_image[
+                    (y + 0) * block_width : (y + 1) * block_width,
+                    (x + 1) * block_width : (x + 2) * block_width,
+                    :,
+                ],
+                4: padded_output_image[
+                    (y + 1) * block_width : (y + 2) * block_width,
+                    (x + 0) * block_width : (x + 1) * block_width,
+                    :,
+                ],
+            }
+            context = np.dstack([context_blocks[idx] for idx in (1, 2, 3, 4)])
             interpolated_block = autoencoder.call(tf.expand_dims(context, axis=0))
-
-            # Insert block back into flood image
             padded_output_image[
                 (y + 0) * block_width : (y + 1) * block_width,
                 (x + 0) * block_width : (x + 1) * block_width,
@@ -333,12 +352,12 @@ def variance_of_laplacian(images: tf.Tensor, ksize: int = 7) -> float:
 
 def compute_vae_loss(
     vae: tf.keras.models.Model,
-    # discriminator: tf.keras.Sequential,
+    discriminator: tf.keras.Sequential,
     images: tf.Tensor,
     labels: tf.Tensor,
     alpha: float = 1e0,
     beta: float = 0e0,
-    gamma: float = 0e0,
+    gamma: float = 1e0,
     delta: float = 0e0,
     epsilon: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
@@ -372,7 +391,7 @@ def compute_vae_loss(
     x_logit = vae.decode(z)
     reconstructed = vae.sample(z)
 
-    # Generate an image from noise input
+    # Flood generate a 3x3 image from noise input
     z_gen = tf.random.normal(shape=z.shape)
     generated = vae.sample(z_gen)
 
@@ -383,20 +402,26 @@ def compute_vae_loss(
     logqz_x = log_normal_pdf(z, mean, logvar)
     kl_loss = -tf.reduce_mean(logpx_z + logpz - logqz_x)
 
-    # # Loss from discriminator output on reconstructed image
-    # reconstruction_output = discriminator(reconstructed)
-    # discrimination_reconstruction_loss = bce(
-    #     tf.ones_like(reconstruction_output), reconstruction_output
-    # )
+    # Loss from discriminator output on reconstructed image
+    reconstruction_output = discriminator(reconstructed)
+    discrimination_reconstruction_loss = bce(
+        tf.ones_like(reconstruction_output), reconstruction_output
+    )
 
-    # # Loss from discriminator output on generated image
-    # fake_output = discriminator(generated)
-    # discrimination_generation_loss = bce(tf.ones_like(fake_output), fake_output)
+    # Loss from discriminator output on generated image
+    generated_output = discriminator(generated)
+    discrimination_generation_loss = bce(
+        tf.ones_like(generated_output), generated_output
+    )
 
     # Sharpness loss on generated images
-    sharpness_loss_generated = -variance_of_laplacian(generated)
+    sharpness_loss_generated = -(
+        variance_of_laplacian(generated, ksize=3)
+        + variance_of_laplacian(generated, ksize=5)
+        + variance_of_laplacian(generated, ksize=7)
+    )
 
-    # Sharpness loss on generated images
+    # Sharpness loss on reconstructed images
     sharpness_loss_reconstructed = -(
         variance_of_laplacian(reconstructed, ksize=3)
         + variance_of_laplacian(reconstructed, ksize=5)
@@ -406,16 +431,16 @@ def compute_vae_loss(
     # Compute total loss and return
     loss = (
         alpha * kl_loss
-        # + beta * discrimination_reconstruction_loss
-        # + gamma * discrimination_generation_loss
+        + beta * discrimination_reconstruction_loss
+        + gamma * discrimination_generation_loss
         + delta * sharpness_loss_generated
         + epsilon * sharpness_loss_reconstructed
     )
     return (
         loss,
         kl_loss,
-        # discrimination_reconstruction_loss,
-        # discrimination_generation_loss,
+        discrimination_reconstruction_loss,
+        discrimination_generation_loss,
         sharpness_loss_generated,
         sharpness_loss_reconstructed,
         reconstructed,
@@ -424,22 +449,27 @@ def compute_vae_loss(
 
 
 def compute_discriminator_loss(
+    vae: tf.keras.models.Model,
     discriminator: tf.keras.models.Model,
     images: tf.Tensor,
+    labels: tf.Tensor,
     reconstructed: tf.Tensor,
     generated: tf.Tensor,
-    beta: float = 0e0,
+    beta: float = 1e0,
     gamma: float = 1e0,
 ) -> Tuple[float, float, float, float]:
     """
     Compute loss for training discriminator network
 
     Args:
+        vae: VAE model - should have encode(), decode(), reparameterize(), and sample()
+             methods
         discriminator: Discriminator model
         images: Training images
+        labels: Training labels
         reconstructed: Reconstructions of training images by autoencoder
         generated: Fake images generated by autoencoder
-        beta: Contribution of loss on reconstructed images to total loss
+        beta: Contribution of loss on interpolated images to total loss
         gamma: Contribution of loss on generated images to total loss
 
     Returns:
@@ -448,19 +478,26 @@ def compute_discriminator_loss(
         Loss on reconstructed images
         Loss on generated images
     """
+    # Generate 4 blocks from scratch, and interpolate the centre (like in flood generation)
+    minibatch_size, _, block_width, context_channels = images.shape
+    z_interp = tf.random.normal(shape=[minibatch_size * 4, vae.latent_dim_])
+    generated = vae.sample(z_interp)
+    context = tf.reshape(generated, [minibatch_size, block_width, block_width, context_channels])
+    interpolated = vae.call(context)
+
     # Run real images, reconstructed images, and fake images through discriminator
-    real_output = discriminator(images)
-    reconstructed_output = discriminator(reconstructed)
+    real_output = discriminator(labels)
+    interpolated_output = discriminator(interpolated)
     generated_output = discriminator(generated)
 
     # Compute loss components
     real_loss = bce(tf.ones_like(real_output), real_output)
-    reconstructed_loss = bce(tf.zeros_like(reconstructed_output), reconstructed_output)
+    interpolated_loss = bce(tf.zeros_like(interpolated_output), interpolated_output)
     generated_loss = bce(tf.zeros_like(generated_output), generated_output)
 
     # Compute total loss and return
-    total_loss = real_loss + beta * reconstructed_loss + gamma * generated_loss
-    return total_loss, real_loss, reconstructed_loss, generated_loss
+    total_loss = real_loss + beta * interpolated_loss + gamma * generated_loss
+    return total_loss, real_loss, interpolated_loss, generated_loss
 
 
 @tf.function
@@ -468,9 +505,9 @@ def train_step(
     images: tf.Tensor,
     labels: tf.Tensor,
     autoencoder: tf.keras.models.Model,
-    # discriminator: tf.keras.models.Model,
+    discriminator: tf.keras.models.Model,
     autoencoder_optimizer: "Optimizer",
-    # discriminator_optimizer: "Optimizer",
+    discriminator_optimizer: "Optimizer",
     loss_metrics: Dict[str, "Metrics"],
     should_train_vae: bool,
     should_train_discriminator: bool,
@@ -495,60 +532,60 @@ def train_step(
         (
             vae_loss,
             kl_loss,
-            # discrimination_reconstruction_loss,
-            # discrimination_generation_loss,
+            discrimination_reconstruction_loss,
+            discrimination_generation_loss,
             generation_sharpness_loss,
             reconstruction_sharpness_loss,
             reconstructed_images,
             generated_images,
         ) = compute_vae_loss(
             autoencoder,
-            # discriminator,
+            discriminator,
             images,
             labels,
         )
-        # (
-        #     discriminator_loss,
-        #     discriminator_real_loss,
-        #     discriminator_reconstructed_loss,
-        #     discriminator_generated_loss,
-        # ) = compute_discriminator_loss(
-        #     discriminator, images, reconstructed_images, generated_images
-        # )
+        (
+            discriminator_loss,
+            discriminator_real_loss,
+            discriminator_interepolated_loss,
+            discriminator_generated_loss,
+        ) = compute_discriminator_loss(
+            vae=autoencoder, discriminator=discriminator, images=images, labels=labels, reconstructed=reconstructed_images, generated=generated_images
+        )
 
     # Compute gradients from losses
     vae_gradients = vae_tape.gradient(vae_loss, autoencoder.trainable_variables)
-    # discriminator_gradients = disc_tape.gradient(
-    #     discriminator_loss, discriminator.trainable_variables
-    # )
+    discriminator_gradients = disc_tape.gradient(
+        discriminator_loss, discriminator.trainable_variables
+    )
 
     # Update weights if desired
     if should_train_vae:
         autoencoder_optimizer.apply_gradients(
             zip(vae_gradients, autoencoder.trainable_variables)
         )
-    # if should_train_discriminator:
-    #     discriminator_optimizer.apply_gradients(
-    #         zip(discriminator_gradients, discriminator.trainable_variables)
-    #     )
+    if should_train_discriminator:
+        discriminator_optimizer.apply_gradients(
+            zip(discriminator_gradients, discriminator.trainable_variables)
+        )
 
     # Log losses to their respective metrics
     loss_metrics["vae_loss_metric"](vae_loss)
     loss_metrics["kl_loss_metric"](kl_loss)
     loss_metrics["generation_sharpness_loss_metric"](generation_sharpness_loss)
     loss_metrics["reconstruction_sharpness_loss_metric"](reconstruction_sharpness_loss)
-    # loss_metrics["discrimination_reconstruction_loss_metric"](
-    #     discrimination_reconstruction_loss
-    # )
-    # loss_metrics["discrimination_generation_loss_metric"](
-    #     discrimination_generation_loss
-    # )
-    # loss_metrics["discriminator_loss_metric"](discriminator_loss)
-    # loss_metrics["discriminator_real_loss_metric"](discriminator_real_loss)
-    # loss_metrics["discriminator_reconstructed_loss_metric"](
-    #     discriminator_reconstructed_loss
-    # )
-    # loss_metrics["discriminator_generated_loss_metric"](discriminator_generated_loss)
+    loss_metrics["discrimination_reconstruction_loss_metric"](
+        discrimination_reconstruction_loss
+    )
+    loss_metrics["discrimination_generation_loss_metric"](
+        discrimination_generation_loss
+    )
+    loss_metrics["discriminator_loss_metric"](discriminator_loss)
+    loss_metrics["discriminator_real_loss_metric"](discriminator_real_loss)
+    loss_metrics["discriminator_interepolated_loss_metric"](
+        discriminator_interepolated_loss
+    )
+    loss_metrics["discriminator_generated_loss_metric"](discriminator_generated_loss)
 
 
 def compute_mse_losses(
@@ -658,9 +695,9 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
 
 def train(
     autoencoder: tf.keras.models.Model,
-    # discriminator: tf.keras.models.Model,
+    discriminator: tf.keras.models.Model,
     autoencoder_optimizer: "Optimizer",
-    # discriminator_optimizer: "Optimizer",
+    discriminator_optimizer: "Optimizer",
     model_dir: str,
     checkpoint: tf.train.Checkpoint,
     checkpoint_prefix: str,
@@ -710,7 +747,7 @@ def train(
 
     # Shape of 3x3 blocks context region
     rows, cols, channels = train_crop_shape
-    context_shape = (rows * 3, cols * 3, channels)
+    context_shape = (rows, cols, channels * 4)
 
     # Pixel Art dataset
     train_images = (
@@ -830,8 +867,6 @@ def train(
         epoch_start = 15 * int(
             continue_from_checkpoint.strip()[continue_from_checkpoint.rfind("-") + 1 :]
         )
-        # with open(epoch_log_file, "r", encoding="utf-8") as epoch_log:
-        #     epoch_start = int(epoch_log.read().strip()) + 1
     else:
         epoch_start = 0
     epoch_stop = epoch_start + epochs
@@ -845,24 +880,24 @@ def train(
     reconstruction_sharpness_loss_metric = tf.keras.metrics.Mean(
         "reconstruction_sharpness_loss", dtype=tf.float32
     )
-    # discrimination_reconstruction_loss_metric = tf.keras.metrics.Mean(
-    #     "discrimination_reconstruction_loss", dtype=tf.float32
-    # )
-    # discrimination_generation_loss_metric = tf.keras.metrics.Mean(
-    #     "discrimination_generation_loss", dtype=tf.float32
-    # )
-    # discriminator_loss_metric = tf.keras.metrics.Mean(
-    #     "discriminator_loss", dtype=tf.float32
-    # )
-    # discriminator_real_loss_metric = tf.keras.metrics.Mean(
-    #     "discriminator_real_loss", dtype=tf.float32
-    # )
-    # discriminator_reconstructed_loss_metric = tf.keras.metrics.Mean(
-    #     "discriminator_reconstructed_loss", dtype=tf.float32
-    # )
-    # discriminator_generated_loss_metric = tf.keras.metrics.Mean(
-    #     "discriminator_generated_loss", dtype=tf.float32
-    # )
+    discrimination_reconstruction_loss_metric = tf.keras.metrics.Mean(
+        "discrimination_reconstruction_loss", dtype=tf.float32
+    )
+    discrimination_generation_loss_metric = tf.keras.metrics.Mean(
+        "discrimination_generation_loss", dtype=tf.float32
+    )
+    discriminator_loss_metric = tf.keras.metrics.Mean(
+        "discriminator_loss", dtype=tf.float32
+    )
+    discriminator_real_loss_metric = tf.keras.metrics.Mean(
+        "discriminator_real_loss", dtype=tf.float32
+    )
+    discriminator_interepolated_loss_metric = tf.keras.metrics.Mean(
+        "discriminator_interepolated_loss", dtype=tf.float32
+    )
+    discriminator_generated_loss_metric = tf.keras.metrics.Mean(
+        "discriminator_generated_loss", dtype=tf.float32
+    )
 
     # Set up logs
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -885,20 +920,20 @@ def train(
                 images=image_batch,
                 labels=label_batch,
                 autoencoder=autoencoder,
-                # discriminator=discriminator,
+                discriminator=discriminator,
                 autoencoder_optimizer=autoencoder_optimizer,
-                # discriminator_optimizer=discriminator_optimizer,
+                discriminator_optimizer=discriminator_optimizer,
                 loss_metrics={
                     "vae_loss_metric": vae_loss_metric,
                     "kl_loss_metric": kl_loss_metric,
                     "generation_sharpness_loss_metric": generation_sharpness_loss_metric,
                     "reconstruction_sharpness_loss_metric": reconstruction_sharpness_loss_metric,
-                    # "discrimination_reconstruction_loss_metric": discrimination_reconstruction_loss_metric,
-                    # "discrimination_generation_loss_metric": discrimination_generation_loss_metric,
-                    # "discriminator_loss_metric": discriminator_loss_metric,
-                    # "discriminator_real_loss_metric": discriminator_real_loss_metric,
-                    # "discriminator_reconstructed_loss_metric": discriminator_reconstructed_loss_metric,
-                    # "discriminator_generated_loss_metric": discriminator_generated_loss_metric,
+                    "discrimination_reconstruction_loss_metric": discrimination_reconstruction_loss_metric,
+                    "discrimination_generation_loss_metric": discrimination_generation_loss_metric,
+                    "discriminator_loss_metric": discriminator_loss_metric,
+                    "discriminator_real_loss_metric": discriminator_real_loss_metric,
+                    "discriminator_interepolated_loss_metric": discriminator_interepolated_loss_metric,
+                    "discriminator_generated_loss_metric": discriminator_generated_loss_metric,
                 },
                 should_train_vae=should_train_vae,
                 should_train_discriminator=should_train_discriminator,
@@ -914,11 +949,9 @@ def train(
                         kl_loss=kl_loss_metric.result(),
                         generation_sharpness_loss=generation_sharpness_loss_metric.result(),
                         reconstruction_sharpness_loss=reconstruction_sharpness_loss_metric.result(),
-                        # discriminator_loss=discriminator_loss_metric.result(),
+                        discriminator_loss=discriminator_loss_metric.result(),
                     )
                 )
-
-            # loss_metric.reset_states()
 
         # Produce demo output every epoch the generator trains
         generated = generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
@@ -1022,36 +1055,36 @@ def train(
                 reconstruction_sharpness_loss_metric.result(),
                 step=epoch,
             )
-            # tf.summary.scalar(
-            #     "Discrimination generation loss metric",
-            #     discrimination_generation_loss_metric.result(),
-            #     step=epoch,
-            # )
-            # tf.summary.scalar(
-            #     "Discrimination reconstruction loss metric",
-            #     discrimination_reconstruction_loss_metric.result(),
-            #     step=epoch,
-            # )
-            # tf.summary.scalar(
-            #     "discriminator loss metric",
-            #     discriminator_loss_metric.result(),
-            #     step=epoch,
-            # )
-            # tf.summary.scalar(
-            #     "discriminator real loss metric",
-            #     discriminator_real_loss_metric.result(),
-            #     step=epoch,
-            # )
-            # tf.summary.scalar(
-            #     "discriminator reconstructed loss metric",
-            #     discriminator_reconstructed_loss_metric.result(),
-            #     step=epoch,
-            # )
-            # tf.summary.scalar(
-            #     "discriminator generated loss metric",
-            #     discriminator_generated_loss_metric.result(),
-            #     step=epoch,
-            # )
+            tf.summary.scalar(
+                "Discrimination generation loss metric",
+                discrimination_generation_loss_metric.result(),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "Discrimination reconstruction loss metric",
+                discrimination_reconstruction_loss_metric.result(),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "discriminator loss metric",
+                discriminator_loss_metric.result(),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "discriminator real loss metric",
+                discriminator_real_loss_metric.result(),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "discriminator reconstructed loss metric",
+                discriminator_interepolated_loss_metric.result(),
+                step=epoch,
+            )
+            tf.summary.scalar(
+                "discriminator generated loss metric",
+                discriminator_generated_loss_metric.result(),
+                step=epoch,
+            )
 
             # MSE reconstruction losses
             tf.summary.scalar("MSE train loss", train_loss, step=epoch)
@@ -1080,37 +1113,37 @@ def train(
             with open(epoch_log_file, "w", encoding="utf-8") as epoch_log:
                 epoch_log.write(str(epoch))
 
-        # # Switch who trains if appropriate
-        # if should_train_discriminator == should_train_vae:
-        #     should_train_vae = False
-        #     should_train_discriminator = True
-        # # elif (
-        # #     should_train_discriminator
-        # #     and discriminator_loss_metric.result() > vae_loss_metric.result()
-        # # ) or (
-        # #     should_train_vae
-        # #     and vae_loss_metric.result() > discriminator_loss_metric.result()
-        # # ):
-        # #     print("Not switching who trains, insufficient progress made")
-        # else:
-        #     should_train_vae = not should_train_vae
-        #     should_train_discriminator = not should_train_discriminator
-        # print(
-        #     f"Switching who trains: {should_train_vae=}, {should_train_discriminator=}"
-        # )
+        # Switch who trains if appropriate
+        if should_train_discriminator == should_train_vae:
+            should_train_vae = False
+            should_train_discriminator = True
+        # elif (
+        #     should_train_discriminator
+        #     and discriminator_loss_metric.result() > vae_loss_metric.result()
+        # ) or (
+        #     should_train_vae
+        #     and vae_loss_metric.result() > discriminator_loss_metric.result()
+        # ):
+        #     print("Not switching who trains, insufficient progress made")
+        else:
+            should_train_vae = not should_train_vae
+            should_train_discriminator = not should_train_discriminator
+        print(
+            f"Switching who trains: {should_train_vae=}, {should_train_discriminator=}"
+        )
 
         # Reset metrics every epoch
         vae_loss_metric.reset_states()
         kl_loss_metric.reset_states()
         generation_sharpness_loss_metric.reset_states()
         reconstruction_sharpness_loss_metric.reset_states()
-        # discriminator_loss_metric.reset_states()
-        # discrimination_reconstruction_loss_metric.reset_states()
-        # discrimination_generation_loss_metric.reset_states()
-        # discriminator_loss_metric.reset_states()
-        # discriminator_real_loss_metric.reset_states()
-        # discriminator_reconstructed_loss_metric.reset_states()
-        # discriminator_generated_loss_metric.reset_states()
+        discriminator_loss_metric.reset_states()
+        discrimination_reconstruction_loss_metric.reset_states()
+        discrimination_generation_loss_metric.reset_states()
+        discriminator_loss_metric.reset_states()
+        discriminator_real_loss_metric.reset_states()
+        discriminator_interepolated_loss_metric.reset_states()
+        discriminator_generated_loss_metric.reset_states()
 
 
 def generate(
@@ -1143,7 +1176,8 @@ def generate(
     while True:
         if flood_shape is not None:
             output = tf.expand_dims(
-                flood_generate(autoencoder, seed=latent_input, shape=flood_shape), axis=0
+                flood_generate(autoencoder, seed=latent_input, shape=flood_shape),
+                axis=0,
             )
         elif sample:
             output = autoencoder.sample(latent_input)
@@ -1317,11 +1351,11 @@ def main(
     # )
 
     autoencoder = VAE(latent_dim=latent_dim, input_shape=train_crop_shape[:2] + (12,))
-    # discriminator = avae_discriminator.model(latent_dim=latent_dim)
+    discriminator = discriminator_model(input_shape=train_crop_shape)
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
     autoencoder_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
-    # discriminator_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
+    discriminator_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
     # optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
     # optimizer = tfa.optimizers.AdamW(
@@ -1332,9 +1366,9 @@ def main(
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
     checkpoint = tf.train.Checkpoint(
         autoencoder=autoencoder,
-        # discriminator=discriminator,
+        discriminator=discriminator,
         autoencoder_optimizer=autoencoder_optimizer,
-        # discriminator_optimizer=discriminator_optimizer,
+        discriminator_optimizer=discriminator_optimizer,
     )
 
     # Restore model from checkpoint
@@ -1344,9 +1378,9 @@ def main(
     if mode == "train":
         train(
             autoencoder=autoencoder,
-            # discriminator=discriminator,
+            discriminator=discriminator,
             autoencoder_optimizer=autoencoder_optimizer,
-            # discriminator_optimizer=discriminator_optimizer,
+            discriminator_optimizer=discriminator_optimizer,
             model_dir=model_dir,
             checkpoint=checkpoint,
             checkpoint_prefix=checkpoint_prefix,
