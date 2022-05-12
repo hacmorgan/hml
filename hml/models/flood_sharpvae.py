@@ -357,7 +357,7 @@ def compute_vae_loss(
     labels: tf.Tensor,
     alpha: float = 1e0,
     beta: float = 0e0,
-    gamma: float = 1e-1,
+    gamma: float = 3e-1,
     delta: float = 0e0,
     epsilon: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
@@ -482,7 +482,9 @@ def compute_discriminator_loss(
     minibatch_size, _, block_width, context_channels = images.shape
     z_interp = tf.random.normal(shape=[minibatch_size * 4, vae.latent_dim_])
     generated = vae.sample(z_interp)
-    context = tf.reshape(generated, [minibatch_size, block_width, block_width, context_channels])
+    context = tf.reshape(
+        generated, [minibatch_size, block_width, block_width, context_channels]
+    )
     interpolated = vae.call(context)
 
     # Run real images, reconstructed images, and fake images through discriminator
@@ -550,7 +552,12 @@ def train_step(
             discriminator_interepolated_loss,
             discriminator_generated_loss,
         ) = compute_discriminator_loss(
-            vae=autoencoder, discriminator=discriminator, images=images, labels=labels, reconstructed=reconstructed_images, generated=generated_images
+            vae=autoencoder,
+            discriminator=discriminator,
+            images=images,
+            labels=labels,
+            reconstructed=reconstructed_images,
+            generated=generated_images,
         )
 
     # Compute gradients from losses
@@ -845,8 +852,6 @@ def train(
     val_test_image_batch, val_test_label_batch = next(iter(val_images))
     val_test_images = val_test_image_batch[:8, ...]
 
-    print(train_test_images[0])
-
     # Make progress dir and reproductions dir for outputs
     os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
     os.makedirs(
@@ -980,7 +985,7 @@ def train(
             val_reproductions_dir,
         )
 
-        # Compute loss on training and validation data
+        # Compute reconstruction loss on training and validation data
         train_loss, val_loss = compute_mse_losses(
             autoencoder,
             train_test_image_batch,
@@ -1004,12 +1009,12 @@ def train(
                 autoencoder_optimizer.learning_rate(epoch * step),
                 step=epoch,
             )
-            # tf.summary.scalar(
-            #     "discriminator learning rate",
-            #     # discriminator_optimizer.learning_rate,
-            #     discriminator_optimizer.learning_rate(epoch * step),
-            #     step=epoch,
-            # )
+            tf.summary.scalar(
+                "discriminator learning rate",
+                # discriminator_optimizer.learning_rate,
+                discriminator_optimizer.learning_rate(epoch * step),
+                step=epoch,
+            )
 
             # Encoder outputs
             tf.summary.histogram(
@@ -1117,20 +1122,16 @@ def train(
         if should_train_discriminator == should_train_vae:
             should_train_vae = False
             should_train_discriminator = True
-        # elif (
-        #     should_train_discriminator
-        #     and discriminator_loss_metric.result() > vae_loss_metric.result()
-        # ) or (
-        #     should_train_vae
-        #     and vae_loss_metric.result() > discriminator_loss_metric.result()
-        # ):
-        #     print("Not switching who trains, insufficient progress made")
+        elif should_train_discriminator and discriminator_loss_metric.result() > 0.1:
+            print("Not switching who trains, discriminator fooled too easily")
+        elif should_train_vae and discriminator_loss_metric.result() < 1.0:
+            print("Not switching who trains, unable to fool discriminator")
         else:
             should_train_vae = not should_train_vae
             should_train_discriminator = not should_train_discriminator
-        print(
-            f"Switching who trains: {should_train_vae=}, {should_train_discriminator=}"
-        )
+            print(
+                f"Switching who trains: {should_train_vae=}, {should_train_discriminator=}"
+            )
 
         # Reset metrics every epoch
         vae_loss_metric.reset_states()
@@ -1330,18 +1331,27 @@ def main(
     # STEPS_PER_EPOCH = 225  # pixel_art - minibatch size 128
     # STEPS_PER_EPOCH = 600  # expanded pixel_art - minibatch size 128
     # STEPS_PER_EPOCH = 665  # expanded pixel_art - minibatch size 128 - checkerboard
-    STEPS_PER_EPOCH = 330  # expanded pixel_art - minibatch size 128 - checkerboard - no flipping
+    STEPS_PER_EPOCH = (
+        330  # expanded pixel_art - minibatch size 128 - checkerboard - no flipping
+    )
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
     #     values=[1e-4, 7e-5, 3e-5],
     #     name=None,
     # )
-    lr = LRS(
+    autoencoder_lr = LRS(
         max_lr=1e-4,
         min_lr=1e-5,
         start_decay_epoch=50,
         stop_decay_epoch=1500,
+        steps_per_epoch=STEPS_PER_EPOCH,
+    )
+    discriminator_lr = LRS(
+        max_lr=1e-4,
+        min_lr=3e-6,
+        start_decay_epoch=50,
+        stop_decay_epoch=500,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
     # lr = tfa.optimizers.CyclicalLearningRate(
@@ -1355,8 +1365,12 @@ def main(
     discriminator = discriminator_model(input_shape=train_crop_shape)
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
-    autoencoder_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
-    discriminator_optimizer = tfa.optimizers.AdamW(weight_decay=1e-7, learning_rate=lr)
+    autoencoder_optimizer = tfa.optimizers.AdamW(
+        weight_decay=1e-7, learning_rate=autoencoder_lr
+    )
+    discriminator_optimizer = tfa.optimizers.AdamW(
+        weight_decay=1e-7, learning_rate=discriminator_lr
+    )
     # optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
     # optimizer = tfa.optimizers.AdamW(

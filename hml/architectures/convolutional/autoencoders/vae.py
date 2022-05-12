@@ -30,7 +30,9 @@ class VAE(tf.keras.models.Model):
         super().__init__()
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
-        self.encoder_ = avae_encoder.model(latent_dim=self.latent_dim_, input_shape=input_shape)
+        self.encoder_ = avae_encoder.model(
+            latent_dim=self.latent_dim_, input_shape=input_shape
+        )
         self.decoder_ = avae_decoder.model(latent_dim=self.latent_dim_)
 
     def call(self, input_image: tf.Tensor) -> tf.Tensor:
