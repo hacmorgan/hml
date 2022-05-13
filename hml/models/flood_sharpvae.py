@@ -1351,7 +1351,7 @@ def main(
         max_lr=1e-4,
         min_lr=3e-6,
         start_decay_epoch=50,
-        stop_decay_epoch=500,
+        stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
     # lr = tfa.optimizers.CyclicalLearningRate(
