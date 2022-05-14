@@ -4,7 +4,9 @@ import tensorflow as tf
 from tensorflow.keras import layers
 
 
-def model(input_shape: Tuple[int, int, int] = (64, 64, 3)) -> tf.keras.Sequential:
+def model(
+    latent_dim: int, input_shape: Tuple[int, int, int] = (192, 192, 3)
+) -> tf.keras.Sequential:
     """
     An encoder based on the DCGAN paper's discriminator
     """
@@ -13,6 +15,16 @@ def model(input_shape: Tuple[int, int, int] = (64, 64, 3)) -> tf.keras.Sequentia
         [
             # Input
             layers.InputLayer(input_shape=input_shape),
+            layers.Conv2D(
+                64,
+                kernel_size=5,
+                strides=3,
+                padding="same",
+                kernel_initializer=init,
+            ),
+            layers.BatchNormalization(),
+            layers.LeakyReLU(alpha=0.2),
+            # Output shape: (64, 64, 64)
             layers.Conv2D(
                 128,
                 kernel_size=5,
@@ -54,10 +66,31 @@ def model(input_shape: Tuple[int, int, int] = (64, 64, 3)) -> tf.keras.Sequentia
             layers.BatchNormalization(),
             layers.LeakyReLU(alpha=0.2),
             # Output shape: (4, 4, 1024)
+            # layers.Conv2D(
+            #     1024,
+            #     kernel_size=5,
+            #     strides=2,
+            #     padding="same",
+            #     activation="relu",
+            #     kernel_initializer=init,
+            # ),
+            # layers.BatchNormalization(),
+            # layers.LeakyReLU(alpha=0.2),
+            # # Output shape: (2, 2, 1024)
+            # layers.Conv2D(
+            #     1024,
+            #     kernel_size=5,
+            #     strides=2,
+            #     padding="same",
+            #     activation="relu",
+            #     kernel_initializer=init,
+            # ),
+            # layers.BatchNormalization(),
+            # layers.LeakyReLU(alpha=0.2),
+            # # Output shape: (1, 1, 1024)
             layers.Flatten(),
-            layers.Dense(1),
-            layers.Activation("sigmoid"),
-            # Discriminator output
+            layers.Dense(2 * latent_dim, kernel_initializer=init),
+            # Latent output (No activation)
         ]
     )
 

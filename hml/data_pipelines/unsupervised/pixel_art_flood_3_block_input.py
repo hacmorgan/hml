@@ -99,31 +99,35 @@ def pad_and_yield_crops(
     for x in range(crop_width, unpadded_image_width, crop_width):
         for y in range(crop_width, unpadded_image_height, crop_width):
 
-            # Extract a reference to each block
-            blocks = {
-                0: image_padded[y : y + crop_width, x : x + crop_width, :],
-                1: image_padded[y : y + crop_width, x - crop_width : x, :],
-                2: image_padded[y - crop_width : y, x : x + crop_width, :],
-                3: image_padded[
-                    y : y + crop_width, x + crop_width : x + 2 * crop_width, :
-                ],
-                4: image_padded[
-                    y + crop_width : y + 2 * crop_width, x : x + crop_width, :
-                ],
-            }
+            # Extract centre block (label)
+            centre_block = image_padded[y : y + crop_width, x : x + crop_width, :]
 
-            # Stack blocks
-            outputs = [(np.dstack([blocks[idx] for idx in (1, 2, 3, 4)]), blocks[0])]
+            # Extract the 3x3 block context region
+            context_blocks = image_padded[
+                y - crop_width : y + 2 * crop_width,
+                x - crop_width : x + 2 * crop_width,
+                :,
+            ].copy()
+
+            # Set corner blocks and centre to 0
+            context_blocks[y : y + crop_width, x : x + crop_width, :] = 0  # Centre
+            context_blocks[y - crop_width : y, x - crop_width : x, :] = 0  # Top left
+            context_blocks[
+                y - crop_width : y, x + crop_width : x + 2 * crop_width, :
+            ] = 0  # Top right
+            context_blocks[
+                y + crop_width : y + 2 * crop_width,
+                x + crop_width : x + 2 * crop_width,
+                :,
+            ] = 0  # Bottom right
+            context_blocks[
+                y + crop_width : y + 2 * crop_width, x - crop_width : x, :
+            ] = 0  # Bottom left
+
+            # Assemble results
+            outputs = [(context_blocks, centre_block)]
             if flip_x:
-                outputs.append(
-                    tuple(
-                        np.fliplr(array)
-                        for array in (
-                            np.dstack([blocks[idx] for idx in (3, 2, 1, 4)]),
-                            blocks[0],
-                        )
-                    )
-                )
+                outputs.append(tuple(map(np.fliplr, outputs[0])))
             yield from (
                 tuple(normalise(raster) for raster in (train_input, label))
                 for train_input, label in outputs

@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.keras import layers
 
 
-def model(input_shape: Tuple[int, int, int] = (64, 64, 3)) -> tf.keras.Sequential:
+def model(input_shape: Tuple[int, int, int] = (192, 192, 3)) -> tf.keras.Sequential:
     """
     An encoder based on the DCGAN paper's discriminator
     """
@@ -13,6 +13,16 @@ def model(input_shape: Tuple[int, int, int] = (64, 64, 3)) -> tf.keras.Sequentia
         [
             # Input
             layers.InputLayer(input_shape=input_shape),
+            layers.Conv2D(
+                64,
+                kernel_size=5,
+                strides=3,
+                padding="same",
+                kernel_initializer=init,
+            ),
+            layers.BatchNormalization(),
+            layers.LeakyReLU(alpha=0.2),
+            # Output shape: (64, 64, 64)
             layers.Conv2D(
                 128,
                 kernel_size=5,
