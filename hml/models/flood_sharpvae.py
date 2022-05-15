@@ -1294,7 +1294,7 @@ def main(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
+    train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 1000,
     batch_size: int = 128,
     epochs_per_turn: int = 1,
@@ -1331,9 +1331,10 @@ def main(
     # STEPS_PER_EPOCH = 225  # pixel_art - minibatch size 128
     # STEPS_PER_EPOCH = 600  # expanded pixel_art - minibatch size 128
     # STEPS_PER_EPOCH = 665  # expanded pixel_art - minibatch size 128 - checkerboard
-    STEPS_PER_EPOCH = (
-        330  # expanded pixel_art - minibatch size 128 - checkerboard - no flipping
-    )
+    # STEPS_PER_EPOCH = (
+    #     330  # expanded pixel_art - minibatch size 128 - checkerboard - no flipping
+    # )
+    STEPS_PER_EPOCH = 83  # expanded pixel_art - 128 crops - minibatch size 128 - checkerboard - no flipping
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
