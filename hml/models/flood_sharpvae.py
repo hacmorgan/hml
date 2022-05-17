@@ -387,7 +387,7 @@ def compute_vae_loss(
     labels: tf.Tensor,
     alpha: float = 1e0,
     beta: float = 0e0,
-    gamma: float = 1e-1,
+    gamma: float = 3e-2,
     delta: float = 0e0,
     epsilon: float = 1e0,
     zeta: float = 1e0,
