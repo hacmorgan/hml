@@ -233,11 +233,41 @@ def save_flood_generated_image(image: np.ndarray, output_dir: str, epoch: int) -
     plt.savefig(output_path, dpi=250)
 
 
+def flood_generate_tensor(
+    autoencoder: tf.keras.models.Model,
+) -> tf.Tensor:
+    """
+    Generate a 3x3 flood image for the purpose of training
+
+    The flood image is saved as a stack of 5 tensors, in the order shown in this diagram
+
+         -
+        |2|
+       -----
+      |1|0|3|
+       -----
+        |4|
+         -
+
+    Args:
+        autoencoder: Autoencoder model
+
+    Returns:
+        Stacked tensor
+    """
+    seed = tf.random.normal([4, autoencoder.latent_dim_])
+    context = autoencoder.sample(seed)
+    interpolated_block = autoencoder.call(
+        tf.concat([context[i : i + 1, ...] for i in range(4)], axis=3)
+    )
+    return tf.concat(values=[interpolated_block, context], axis=0)
+
+
 def flood_generate(
     autoencoder: tf.keras.models.Model,
     seed: Optional[tf.Tensor] = None,
     shape: Tuple[int, int] = (4, 4),
-) -> tf.Tensor:
+) -> np.ndarray:
     """
     Flood-fill a large image by autogenerating the every other block (like a
     checkerboard), then interpolating the remaining blocks from context
@@ -360,6 +390,7 @@ def compute_vae_loss(
     gamma: float = 2e-1,
     delta: float = 0e0,
     epsilon: float = 1e0,
+    zeta: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
@@ -375,6 +406,7 @@ def compute_vae_loss(
         gamma: Contribution of discriminator loss on generated images to total loss
         delta: Contribution of generated image sharpness loss to total loss
         epsilon: Contribution of reconstructed image sharpness loss to total loss
+        zeta: Contribution of smooth boundaries loss to total loss
 
     Returns:
         Total loss
@@ -391,9 +423,16 @@ def compute_vae_loss(
     x_logit = vae.decode(z)
     reconstructed = vae.sample(z)
 
-    # Flood generate a 3x3 image from noise input
+    # Generate a block from noise input
     z_gen = tf.random.normal(shape=z.shape)
     generated = vae.sample(z_gen)
+
+    # Flood generate a 3x3 image from noise input
+    flood_generated = flood_generate_tensor(autoencoder=vae)
+    flood_generated_stacked = tf.concat(
+        [flood_generated[i : i + 1, ...] for i in range(5)], axis=3
+    )
+    train_stacked = tf.concat(values=[labels, images], axis=3)
 
     # Compute KL divergence loss
     cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=labels)
@@ -403,13 +442,14 @@ def compute_vae_loss(
     kl_loss = -tf.reduce_mean(logpx_z + logpz - logqz_x)
 
     # Loss from discriminator output on reconstructed image
-    reconstruction_output = discriminator(reconstructed)
+    reconstructed_stacked = tf.concat(values=[reconstructed, images], axis=3)
+    reconstruction_output = discriminator(reconstructed_stacked)
     discrimination_reconstruction_loss = bce(
         tf.ones_like(reconstruction_output), reconstruction_output
     )
 
     # Loss from discriminator output on generated image
-    generated_output = discriminator(generated)
+    generated_output = discriminator(flood_generated_stacked)
     discrimination_generation_loss = bce(
         tf.ones_like(generated_output), generated_output
     )
@@ -428,6 +468,39 @@ def compute_vae_loss(
         + variance_of_laplacian(reconstructed, ksize=7)
     )
 
+    # Loss from sharp boundaries between centre block and outer blocks
+    inner_boundaries = {
+        "left": flood_generated[0, :, 1, :],
+        "upper": flood_generated[0, 1, :, :],
+        "right": flood_generated[0, :, -1, :],
+        "lower": flood_generated[0, -1, :, :],
+    }
+    outer_boundaries = {
+        "left": flood_generated[1, :, -1, :],
+        "upper": flood_generated[2, -1, :, :],
+        "right": flood_generated[3, :, 1, :],
+        "lower": flood_generated[4, 1, :, :],
+    }
+    inner_stacked = tf.concat(
+        values=[
+            inner_boundaries["upper"],
+            inner_boundaries["lower"],
+            inner_boundaries["left"],
+            inner_boundaries["right"],
+        ],
+        axis=0,
+    )
+    outer_stacked = tf.concat(
+        values=[
+            outer_boundaries["upper"],
+            outer_boundaries["lower"],
+            outer_boundaries["left"],
+            outer_boundaries["right"],
+        ],
+        axis=0,
+    )
+    smooth_boundaries_loss = tf.reduce_sum(inner_stacked ** 2 - outer_stacked ** 2)
+
     # Compute total loss and return
     loss = (
         alpha * kl_loss
@@ -435,6 +508,7 @@ def compute_vae_loss(
         + gamma * discrimination_generation_loss
         + delta * sharpness_loss_generated
         + epsilon * sharpness_loss_reconstructed
+        + zeta * smooth_boundaries_loss
     )
     return (
         loss,
@@ -445,16 +519,18 @@ def compute_vae_loss(
         sharpness_loss_reconstructed,
         reconstructed,
         generated,
+        train_stacked,
+        reconstructed_stacked,
+        flood_generated_stacked,
     )
 
 
 def compute_discriminator_loss(
     vae: tf.keras.models.Model,
     discriminator: tf.keras.models.Model,
-    images: tf.Tensor,
-    labels: tf.Tensor,
-    reconstructed: tf.Tensor,
-    generated: tf.Tensor,
+    train_stacked: tf.Tensor,
+    reconstructed_stacked: tf.Tensor,
+    flood_generated: tf.Tensor,
     beta: float = 1e0,
     gamma: float = 1e0,
 ) -> Tuple[float, float, float, float]:
@@ -470,7 +546,7 @@ def compute_discriminator_loss(
         reconstructed: Reconstructions of training images by autoencoder
         generated: Fake images generated by autoencoder
         beta: Contribution of loss on interpolated images to total loss
-        gamma: Contribution of loss on generated images to total loss
+        gamma: Contribution of loss on flood generated images to total loss
 
     Returns:
         Total loss
@@ -478,19 +554,10 @@ def compute_discriminator_loss(
         Loss on reconstructed images
         Loss on generated images
     """
-    # Generate 4 blocks from scratch, and interpolate the centre (like in flood generation)
-    minibatch_size, _, block_width, context_channels = images.shape
-    z_interp = tf.random.normal(shape=[minibatch_size * 4, vae.latent_dim_])
-    generated = vae.sample(z_interp)
-    context = tf.reshape(
-        generated, [minibatch_size, block_width, block_width, context_channels]
-    )
-    interpolated = vae.call(context)
-
     # Run real images, reconstructed images, and fake images through discriminator
-    real_output = discriminator(labels)
-    interpolated_output = discriminator(interpolated)
-    generated_output = discriminator(generated)
+    real_output = discriminator(train_stacked)
+    interpolated_output = discriminator(reconstructed_stacked)
+    generated_output = discriminator(flood_generated)
 
     # Compute loss components
     real_loss = bce(tf.ones_like(real_output), real_output)
@@ -540,6 +607,9 @@ def train_step(
             reconstruction_sharpness_loss,
             reconstructed_images,
             generated_images,
+            train_stacked,
+            reconstructed_stacked,
+            flood_generated,
         ) = compute_vae_loss(
             autoencoder,
             discriminator,
@@ -554,10 +624,9 @@ def train_step(
         ) = compute_discriminator_loss(
             vae=autoencoder,
             discriminator=discriminator,
-            images=images,
-            labels=labels,
-            reconstructed=reconstructed_images,
-            generated=generated_images,
+            train_stacked=train_stacked,
+            reconstructed_stacked=reconstructed_stacked,
+            flood_generated=flood_generated,
         )
 
     # Compute gradients from losses
@@ -1363,7 +1432,7 @@ def main(
     # )
 
     autoencoder = VAE(latent_dim=latent_dim, input_shape=train_crop_shape[:2] + (12,))
-    discriminator = discriminator_model(input_shape=train_crop_shape)
+    discriminator = discriminator_model(input_shape=train_crop_shape[:2] + (15,))
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
     autoencoder_optimizer = tfa.optimizers.AdamW(
