@@ -48,11 +48,18 @@ MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
 
 UPDATE_TEMPLATE = """
 Epoch: {epoch}    Step: {step}    Time: {epoch_time:.2f}
-KL loss:                       {kl_loss:>6.4f}
-Reconstruction sharpness loss: {reconstruction_sharpness_loss:>6.4f}
-Generation sharpness loss:     {generation_sharpness_loss:>6.4f}
-Total loss:                    {vae_loss:>6.4f}
-Discriminator loss:            {discriminator_loss:>6.4f}
+
+KL loss:                            {kl_loss:>6.4f}
+Reconstruction sharpness loss:      {reconstruction_sharpness_loss:>6.4f}
+Generation sharpness loss:          {generation_sharpness_loss:>6.4f}
+Discrimination loss - interpolated: {discrimination_interpolated_loss:>6.4f}
+Discrimination loss - generated:    {discrimination_generated_loss:>6.4f}
+Total autoencoder loss:             {vae_loss:>6.4f}
+
+Discriminator loss - real:         {discriminator_real_loss:>6.4f}
+Discriminator loss - interpolated: {discriminator_interpolated_loss:>6.4f}
+Discriminator loss - generated:    {discriminator_generated_loss:>6.4f}
+Total discriminator loss:          {discriminator_loss:>6.4f}
 """
 # Discriminator loss: {discriminator_loss}
 
@@ -209,8 +216,6 @@ def show_reproduction_quality(
     Generate and save images
     """
     reproductions = autoencoder.call(test_images)
-    print(f"{np.mean(reproductions)=}, {np.std(reproductions)=}")
-    print(f"{np.mean(test_images)=}, {np.std(test_images)=}")
     output_path = os.path.join(
         reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
     )
@@ -387,9 +392,9 @@ def compute_vae_loss(
     labels: tf.Tensor,
     alpha: float = 1e0,
     beta: float = 0e0,
-    gamma: float = 1e-2,
+    gamma: float = 3e-1,
     delta: float = 0e0,
-    epsilon: float = 1e0,
+    epsilon: float = 0e0,
     zeta: float = 0e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
@@ -444,7 +449,7 @@ def compute_vae_loss(
     # Loss from discriminator output on reconstructed image
     reconstructed_stacked = tf.concat(values=[reconstructed, images], axis=3)
     reconstruction_output = discriminator(reconstructed_stacked)
-    discrimination_reconstruction_loss = bce(
+    discrimination_interpolation_loss = bce(
         tf.ones_like(reconstruction_output), reconstruction_output
     )
 
@@ -504,7 +509,7 @@ def compute_vae_loss(
     # Compute total loss and return
     loss = (
         alpha * kl_loss
-        + beta * discrimination_reconstruction_loss
+        + beta * discrimination_interpolation_loss
         + gamma * discrimination_generation_loss
         + delta * sharpness_loss_generated
         + epsilon * sharpness_loss_reconstructed
@@ -513,7 +518,7 @@ def compute_vae_loss(
     return (
         loss,
         kl_loss,
-        discrimination_reconstruction_loss,
+        discrimination_interpolation_loss,
         discrimination_generation_loss,
         sharpness_loss_generated,
         sharpness_loss_reconstructed,
@@ -601,7 +606,7 @@ def train_step(
         (
             vae_loss,
             kl_loss,
-            discrimination_reconstruction_loss,
+            discrimination_interpolation_loss,
             discrimination_generation_loss,
             generation_sharpness_loss,
             reconstruction_sharpness_loss,
@@ -619,7 +624,7 @@ def train_step(
         (
             discriminator_loss,
             discriminator_real_loss,
-            discriminator_interepolated_loss,
+            discriminator_interpolated_loss,
             discriminator_generated_loss,
         ) = compute_discriminator_loss(
             vae=autoencoder,
@@ -650,16 +655,16 @@ def train_step(
     loss_metrics["kl_loss_metric"](kl_loss)
     loss_metrics["generation_sharpness_loss_metric"](generation_sharpness_loss)
     loss_metrics["reconstruction_sharpness_loss_metric"](reconstruction_sharpness_loss)
-    loss_metrics["discrimination_reconstruction_loss_metric"](
-        discrimination_reconstruction_loss
+    loss_metrics["discrimination_interpolation_loss_metric"](
+        discrimination_interpolation_loss
     )
     loss_metrics["discrimination_generation_loss_metric"](
         discrimination_generation_loss
     )
     loss_metrics["discriminator_loss_metric"](discriminator_loss)
     loss_metrics["discriminator_real_loss_metric"](discriminator_real_loss)
-    loss_metrics["discriminator_interepolated_loss_metric"](
-        discriminator_interepolated_loss
+    loss_metrics["discriminator_interpolated_loss_metric"](
+        discriminator_interpolated_loss
     )
     loss_metrics["discriminator_generated_loss_metric"](discriminator_generated_loss)
 
@@ -936,7 +941,6 @@ def train(
     )
 
     # Set starting and end epoch according to whether we are continuing training
-    epoch_log_file = os.path.join(model_dir, "epoch_log")
     if continue_from_checkpoint is not None:
         epoch_start = 15 * int(
             continue_from_checkpoint.strip()[continue_from_checkpoint.rfind("-") + 1 :]
@@ -954,8 +958,8 @@ def train(
     reconstruction_sharpness_loss_metric = tf.keras.metrics.Mean(
         "reconstruction_sharpness_loss", dtype=tf.float32
     )
-    discrimination_reconstruction_loss_metric = tf.keras.metrics.Mean(
-        "discrimination_reconstruction_loss", dtype=tf.float32
+    discrimination_interpolation_loss_metric = tf.keras.metrics.Mean(
+        "discrimination_interpolation_loss", dtype=tf.float32
     )
     discrimination_generation_loss_metric = tf.keras.metrics.Mean(
         "discrimination_generation_loss", dtype=tf.float32
@@ -966,8 +970,8 @@ def train(
     discriminator_real_loss_metric = tf.keras.metrics.Mean(
         "discriminator_real_loss", dtype=tf.float32
     )
-    discriminator_interepolated_loss_metric = tf.keras.metrics.Mean(
-        "discriminator_interepolated_loss", dtype=tf.float32
+    discriminator_interpolated_loss_metric = tf.keras.metrics.Mean(
+        "discriminator_interpolated_loss", dtype=tf.float32
     )
     discriminator_generated_loss_metric = tf.keras.metrics.Mean(
         "discriminator_generated_loss", dtype=tf.float32
@@ -1002,11 +1006,11 @@ def train(
                     "kl_loss_metric": kl_loss_metric,
                     "generation_sharpness_loss_metric": generation_sharpness_loss_metric,
                     "reconstruction_sharpness_loss_metric": reconstruction_sharpness_loss_metric,
-                    "discrimination_reconstruction_loss_metric": discrimination_reconstruction_loss_metric,
+                    "discrimination_interpolation_loss_metric": discrimination_interpolation_loss_metric,
                     "discrimination_generation_loss_metric": discrimination_generation_loss_metric,
                     "discriminator_loss_metric": discriminator_loss_metric,
                     "discriminator_real_loss_metric": discriminator_real_loss_metric,
-                    "discriminator_interepolated_loss_metric": discriminator_interepolated_loss_metric,
+                    "discriminator_interpolated_loss_metric": discriminator_interpolated_loss_metric,
                     "discriminator_generated_loss_metric": discriminator_generated_loss_metric,
                 },
                 should_train_vae=should_train_vae,
@@ -1016,13 +1020,23 @@ def train(
             if step % 5 == 0:
                 print(
                     UPDATE_TEMPLATE.format(
+                        # Epoch/step info
                         epoch=epoch + 1,
                         step=step,
                         epoch_time=time.time() - start,
+
+                        # Autoencoder loss metrics
                         vae_loss=vae_loss_metric.result(),
                         kl_loss=kl_loss_metric.result(),
                         generation_sharpness_loss=generation_sharpness_loss_metric.result(),
                         reconstruction_sharpness_loss=reconstruction_sharpness_loss_metric.result(),
+                        discrimination_interpolated_loss=discrimination_interpolation_loss_metric.result(),
+                        discrimination_generated_loss=discrimination_generation_loss_metric.result(),
+
+                        # Discriminator loss metrics
+                        discriminator_real_loss=discriminator_real_loss_metric.result(),
+                        discriminator_interpolated_loss=discriminator_interpolated_loss_metric.result(),
+                        discriminator_generated_loss=discriminator_generated_loss_metric.result(),
                         discriminator_loss=discriminator_loss_metric.result(),
                     )
                 )
@@ -1136,7 +1150,7 @@ def train(
             )
             tf.summary.scalar(
                 "Discrimination reconstruction loss metric",
-                discrimination_reconstruction_loss_metric.result(),
+                discrimination_interpolation_loss_metric.result(),
                 step=epoch,
             )
             tf.summary.scalar(
@@ -1151,7 +1165,7 @@ def train(
             )
             tf.summary.scalar(
                 "discriminator reconstructed loss metric",
-                discriminator_interepolated_loss_metric.result(),
+                discriminator_interpolated_loss_metric.result(),
                 step=epoch,
             )
             tf.summary.scalar(
@@ -1183,10 +1197,6 @@ def train(
             # Also close all pyplot figures. It is expensive to do this every epoch
             plt.close("all")
 
-            # Write our last epoch down in case we want to continue
-            with open(epoch_log_file, "w", encoding="utf-8") as epoch_log:
-                epoch_log.write(str(epoch))
-
         # Switch who trains if appropriate
         if should_train_discriminator == should_train_vae:
             should_train_vae = False
@@ -1198,9 +1208,8 @@ def train(
         else:
             should_train_vae = not should_train_vae
             should_train_discriminator = not should_train_discriminator
-            print(
-                f"Switching who trains: {should_train_vae=}, {should_train_discriminator=}"
-            )
+            print("Switching who trains")
+        print(f"{should_train_vae=}, {should_train_discriminator=}")
 
         # Reset metrics every epoch
         vae_loss_metric.reset_states()
@@ -1208,11 +1217,11 @@ def train(
         generation_sharpness_loss_metric.reset_states()
         reconstruction_sharpness_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
-        discrimination_reconstruction_loss_metric.reset_states()
+        discrimination_interpolation_loss_metric.reset_states()
         discrimination_generation_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
         discriminator_real_loss_metric.reset_states()
-        discriminator_interepolated_loss_metric.reset_states()
+        discriminator_interpolated_loss_metric.reset_states()
         discriminator_generated_loss_metric.reset_states()
 
 
