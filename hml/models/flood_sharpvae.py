@@ -791,6 +791,8 @@ def train(
     epochs_per_turn: int = 1,
     latent_dim: int = 10,
     num_examples_to_generate: int = 16,
+    discriminator_loss_start_training_threshold: float = 5,
+    discriminator_loss_stop_training_threshold: float = 0.5,
     continue_from_checkpoint: Optional[str] = None,
     debug: bool = False,
 ) -> None:
@@ -814,8 +816,15 @@ def train(
         epochs_per_turn: How long to train one model before switching to the other
         latent_dim: Number of noise inputs to generator
         num_examples_to_generate: How many examples to generate on each epoch
+        discriminator_loss_start_training_threshold: Only switch to training
+                                                     discriminator if its loss is higher
+                                                     than this
+        discriminator_loss_stop_training_threshold: Only switch to training autoencoder
+                                                    if discriminator loss is lower than
+                                                    this
         continue_from_checkpoint: Restore weights from checkpoint file if given, start
                                   from scratch otherwise.
+        debug: Don't die if code not committed (for testing)
     """
     if not debug:
         # Die if there are uncommitted changes in the repo
@@ -1024,7 +1033,6 @@ def train(
                         epoch=epoch + 1,
                         step=step,
                         epoch_time=time.time() - start,
-
                         # Autoencoder loss metrics
                         vae_loss=vae_loss_metric.result(),
                         kl_loss=kl_loss_metric.result(),
@@ -1032,7 +1040,6 @@ def train(
                         reconstruction_sharpness_loss=reconstruction_sharpness_loss_metric.result(),
                         discrimination_interpolated_loss=discrimination_interpolation_loss_metric.result(),
                         discrimination_generated_loss=discrimination_generation_loss_metric.result(),
-
                         # Discriminator loss metrics
                         discriminator_real_loss=discriminator_real_loss_metric.result(),
                         discriminator_interpolated_loss=discriminator_interpolated_loss_metric.result(),
@@ -1201,9 +1208,17 @@ def train(
         if should_train_discriminator == should_train_vae:
             should_train_vae = False
             should_train_discriminator = True
-        elif should_train_discriminator and discriminator_loss_metric.result() > 0.1:
+        elif (
+            should_train_discriminator
+            and discriminator_loss_metric.result()
+            > discriminator_loss_stop_training_threshold
+        ):
             print("Not switching who trains, discriminator fooled too easily")
-        elif should_train_vae and discriminator_loss_metric.result() < 1.0:
+        elif (
+            should_train_vae
+            and discriminator_loss_metric.result()
+            < discriminator_loss_start_training_threshold
+        ):
             print("Not switching who trains, unable to fool discriminator")
         else:
             should_train_vae = not should_train_vae
