@@ -791,7 +791,7 @@ def train(
     epochs_per_turn: int = 1,
     latent_dim: int = 10,
     num_examples_to_generate: int = 16,
-    discriminator_loss_start_training_threshold: float = 5,
+    discriminator_loss_start_training_threshold: float = 1.0,
     discriminator_loss_stop_training_threshold: float = 0.5,
     continue_from_checkpoint: Optional[str] = None,
     debug: bool = False,
