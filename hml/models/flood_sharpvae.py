@@ -33,9 +33,14 @@ import tensorflow_datasets as tfds
 
 
 from hml.architectures.convolutional.autoencoders.vae import VAE
+
 from hml.architectures.convolutional.discriminators.avae_discriminator import (
     model as discriminator_model,
 )
+
+# from hml.architectures.convolutional.discriminators.avae_discriminator_3_block_input import (
+#     model as discriminator_model,
+# )
 
 from hml.data_pipelines.unsupervised.pixel_art_flood import PixelArtFloodDataset
 
@@ -392,10 +397,11 @@ def compute_vae_loss(
     labels: tf.Tensor,
     alpha: float = 1e0,
     beta: float = 0e0,
-    gamma: float = 3e-1,
-    delta: float = 0e0,
-    epsilon: float = 0e0,
-    zeta: float = 0e0,
+    # gamma: float = 3e-1,
+    gamma: float = 0e0,
+    delta: float = 1e0,
+    epsilon: float = 1e0,
+    zeta: float = 1e0,
 ) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
     """
     Compute loss for training VAE
@@ -461,9 +467,9 @@ def compute_vae_loss(
 
     # Sharpness loss on generated images
     sharpness_loss_generated = -(
-        variance_of_laplacian(generated, ksize=3)
-        + variance_of_laplacian(generated, ksize=5)
-        + variance_of_laplacian(generated, ksize=7)
+        variance_of_laplacian(flood_generated, ksize=3)
+        + variance_of_laplacian(flood_generated, ksize=5)
+        + variance_of_laplacian(flood_generated, ksize=7)
     )
 
     # Sharpness loss on reconstructed images
@@ -996,7 +1002,7 @@ def train(
 
     # Start by training both networks
     should_train_vae = True
-    should_train_discriminator = True
+    should_train_discriminator = False
 
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
@@ -1204,27 +1210,27 @@ def train(
             # Also close all pyplot figures. It is expensive to do this every epoch
             plt.close("all")
 
-        # Switch who trains if appropriate
-        if should_train_discriminator == should_train_vae:
-            should_train_vae = False
-            should_train_discriminator = True
-        elif (
-            should_train_discriminator
-            and discriminator_loss_metric.result()
-            > discriminator_loss_stop_training_threshold
-        ):
-            print("Not switching who trains, discriminator fooled too easily")
-        elif (
-            should_train_vae
-            and discriminator_loss_metric.result()
-            < discriminator_loss_start_training_threshold
-        ):
-            print("Not switching who trains, unable to fool discriminator")
-        else:
-            should_train_vae = not should_train_vae
-            should_train_discriminator = not should_train_discriminator
-            print("Switching who trains")
-        print(f"{should_train_vae=}, {should_train_discriminator=}")
+        # # Switch who trains if appropriate
+        # if should_train_discriminator == should_train_vae:
+        #     should_train_vae = False
+        #     should_train_discriminator = True
+        # elif (
+        #     should_train_discriminator
+        #     and discriminator_loss_metric.result()
+        #     > discriminator_loss_stop_training_threshold
+        # ):
+        #     print("Not switching who trains, discriminator fooled too easily")
+        # elif (
+        #     should_train_vae
+        #     and discriminator_loss_metric.result()
+        #     < discriminator_loss_start_training_threshold
+        # ):
+        #     print("Not switching who trains, unable to fool discriminator")
+        # else:
+        #     should_train_vae = not should_train_vae
+        #     should_train_discriminator = not should_train_discriminator
+        #     print("Switching who trains")
+        # print(f"{should_train_vae=}, {should_train_discriminator=}")
 
         # Reset metrics every epoch
         vae_loss_metric.reset_states()
