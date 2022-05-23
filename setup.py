@@ -17,6 +17,7 @@ setup(
         "hml.data_pipelines.unsupervised",
         "hml.layers",
         "hml.models",
+        "hml.util",
     ],
     scripts=[
         "hml/models/flood_sharpvae.py",
@@ -24,6 +25,7 @@ setup(
         "hml/models/pixel_art_ae.py",
         "hml/models/pixel_art_vae.py",
         "hml/models/pixel_art_avae.py",
+        "hml/models/sample_gan.py",
     ],
     install_requires=[
         "GitPython",
