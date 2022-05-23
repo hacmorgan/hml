@@ -76,13 +76,8 @@ def save_tensor_image(image: tf.Tensor, path: str) -> None:
         image: Image as tf Tensor
         path: Path to save image to
     """
-    cv2.imwrite(
-        path,
-        cv2.cvtColor(
-            (image.numpy() * 255.0).astype(int)[0, ...],
-            code=cv2.COLOR_RGB2BGR,
-        ),
-    )
+    print(tf.shape(image))
+    PIL.Image.fromarray((image.numpy() * 255.0).astype(np.uint8)[0, ...]).save(path)
 
 
 def generate_and_save_images(
