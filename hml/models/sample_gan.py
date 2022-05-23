@@ -68,6 +68,23 @@ global latent_input_canvas
 global generator_output_canvas
 
 
+def save_tensor_image(image: tf.Tensor, path: str) -> None:
+    """
+    Save a tensor to disk as an image
+
+    Args:
+        image: Image as tf Tensor
+        path: Path to save image to
+    """
+    cv2.imwrite(
+        path,
+        cv2.cvtColor(
+            (image.numpy() * 255.0).astype(int)[0, ...],
+            code=cv2.COLOR_RGB2BGR,
+        ),
+    )
+
+
 def generate_and_save_images(
     generator: tf.keras.Sequential,
     epoch: int,
@@ -108,10 +125,8 @@ def generate_and_save_images(
     )
 
     # Write to filesystem
-    cv2.imwrite(
-        consistent_generation_path, (consistent_generation.numpy() * 255.0).astype(int)
-    )
-    cv2.imwrite(random_generation_path, (random_generation.numpy() * 255.0).astype(int))
+    save_tensor_image(image=consistent_generation, path=consistent_generation_path)
+    save_tensor_image(image=random_generation, path=random_generation_path)
 
     # Stack generated images and return
     return consistent_generation, random_generation

@@ -9,13 +9,12 @@ def model() -> tf.keras.Sequential:
     """
     SampleGAN model: generates 1920x1080 px wallpaper
     """
-    init = tf.keras.initializers.RandomNormal(stddev=0.02)
     generator = tf.keras.Sequential(
         [
             # Latent input
             layers.Input(shape=(GENERATOR_LATENT_DIM,)),
             # Dense layer, shaped as (16, 9, 128) conv layer
-            layers.Dense(9 * 16 * 128, use_bias=False, kernel_initializer=init),
+            layers.Dense(9 * 16 * 128, use_bias=False),
             layers.Reshape((9, 16, 128)),
             layers.BatchNormalization(),
             layers.ReLU(),
@@ -26,7 +25,6 @@ def model() -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 use_bias=False,
-                kernel_initializer=init,
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
@@ -37,7 +35,6 @@ def model() -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 use_bias=False,
-                kernel_initializer=init,
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
@@ -48,7 +45,6 @@ def model() -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 use_bias=False,
-                kernel_initializer=init,
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
@@ -59,7 +55,6 @@ def model() -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 use_bias=False,
-                kernel_initializer=init,
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
@@ -70,7 +65,6 @@ def model() -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 use_bias=False,
-                kernel_initializer=init,
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
@@ -81,7 +75,6 @@ def model() -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 use_bias=False,
-                kernel_initializer=init,
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
@@ -92,7 +85,6 @@ def model() -> tf.keras.Sequential:
                 strides=2,
                 padding="same",
                 use_bias=False,
-                kernel_initializer=init,
             ),
             layers.BatchNormalization(),
             layers.ReLU(),
@@ -103,7 +95,6 @@ def model() -> tf.keras.Sequential:
                 padding="same",
                 activation="sigmoid",
                 use_bias=False,
-                kernel_initializer=init,
             ),
         ]
     )
