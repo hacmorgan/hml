@@ -364,8 +364,8 @@ def train(
     latent_dim: int,
     epochs: int = 20000,
     buffer_size: int = 1000,
-    discriminator_loss_start_training_threshold: float = 1.0,
-    discriminator_loss_stop_training_threshold: float = 0.5,
+    generator_loss_stop_training_threshold: float = 1.0,
+    generator_loss_start_training_threshold: float = 0.1,
     continue_from_checkpoint: Optional[str] = None,
     debug: bool = False,
 ) -> None:
@@ -399,16 +399,18 @@ def train(
                                   from scratch otherwise.
         debug: Don't die if code not committed (for testing)
     """
+    # Skip git checks when debugging
     if not debug:
+
         # Die if there are uncommitted changes in the repo
         if modified_files_in_git_repo():
-            return
+            sys.exit(1)
 
         # Write commit hash to model directory
         os.makedirs(model_dir, exist_ok=True)
         write_commit_hash_to_model_dir(model_dir)
 
-    # Pixel Art dataset
+    # Training dataset
     train_images = (
         tf.data.Dataset.from_generator(
             PixelArtSigmoidDataset(
@@ -549,14 +551,12 @@ def train(
             should_train_discriminator = True
         elif (
             should_train_discriminator
-            and discriminator_loss_metric.result()
-            > discriminator_loss_stop_training_threshold
+            and generator_loss_metric.result() < generator_loss_start_training_threshold
         ):
             print("Not switching who trains, discriminator fooled too easily")
         elif (
             should_train_generator
-            and discriminator_loss_metric.result()
-            < discriminator_loss_start_training_threshold
+            and generator_loss_metric.result() > generator_loss_stop_training_threshold
         ):
             print("Not switching who trains, unable to fool discriminator")
         else:
@@ -668,16 +668,16 @@ def main(
     #     values=[1e-4, 7e-5, 3e-5],
     #     name=None,
     # )
-    autoencoder_lr = LRS(
-        max_lr=1e-4,
-        min_lr=1e-5,
+    generator_lr = LRS(
+        max_lr=3e-5,
+        min_lr=1e-6,
         start_decay_epoch=50,
         stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
     discriminator_lr = LRS(
-        max_lr=1e-4,
-        min_lr=3e-6,
+        max_lr=3e-5,
+        min_lr=1e-6,
         start_decay_epoch=50,
         stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
@@ -694,7 +694,7 @@ def main(
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
     generator_optimizer = tfa.optimizers.AdamW(
-        weight_decay=1e-7, learning_rate=autoencoder_lr
+        weight_decay=1e-7, learning_rate=generator_lr
     )
     discriminator_optimizer = tfa.optimizers.AdamW(
         weight_decay=1e-7, learning_rate=discriminator_lr
