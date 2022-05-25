@@ -385,6 +385,7 @@ def decide_who_trains(
         should_train_discriminator = not should_train_discriminator
         print("Switching who trains")
     print(f"{should_train_generator=}, {should_train_discriminator=}")
+    return should_train_generator, should_train_discriminator
 
 
 def train(
