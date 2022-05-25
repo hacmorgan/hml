@@ -329,7 +329,7 @@ def train(
     )
     val_images = (
         tf.data.Dataset.from_generator(
-            ResizeDataset(dataset_path=val_path, ouput_shape=train_crop_shape),
+            ResizeDataset(dataset_path=val_path, output_shape=train_crop_shape),
             output_signature=tf.TensorSpec(shape=train_crop_shape, dtype=tf.float32),
         )
         .shuffle(buffer_size)
