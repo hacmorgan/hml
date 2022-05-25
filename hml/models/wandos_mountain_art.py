@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#/usr/bin/env python3
 
 
 """
@@ -31,11 +31,11 @@ import PIL.Image
 # import PIL.ImageTk
 import tensorflow as tf
 import tensorflow_addons as tfa
-import tensorflow_datasets as tfds
+#import tensorflow_datasets as tfds
 import tensorflow_gan as tfgan
 
 
-from hml.architectures.convolutional.autoencoders.pixel_art_vae import PixelArtVAE
+from hml.architectures.convolutional.autoencoders.mountain_vae import PixelArtVAE
 from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
 
 
@@ -586,7 +586,7 @@ def main(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
+    train_crop_shape: Tuple[int, int, int] = (64, 64, 3),
     buffer_size: int = 20000,
     batch_size: int = 128,
     epochs_per_turn: int = 1,
@@ -625,7 +625,7 @@ def main(
     # STEPS_PER_EPOCH = 215  # eboy with x2 augmentation
     # STEPS_PER_EPOCH = 180  # x2 augmentation, 128x128 crops
     # STEPS_PER_EPOCH = 185  # stanford_dogs
-    STEPS_PER_EPOCH = 90  # stanford_dogs, batch size 128
+    STEPS_PER_EPOCH = 23  # stanford_dogs, batch size 128
 
     clr = tfa.optimizers.CyclicalLearningRate(
         # initial_learning_rate=8e-5,
@@ -712,7 +712,7 @@ def get_args() -> argparse.Namespace:
         "--dataset",
         "-d",
         type=str,
-        default="/mnt/i/MachineLearning/train-scene-classification/mountains",
+        default="/mnt/i/MachineLearning/train-scene-classification/mountain",
         help="Path to dataset directory, containing training images",
     )
     parser.add_argument(
@@ -750,7 +750,7 @@ def get_args() -> argparse.Namespace:
         "--validation-dataset",
         "-v",
         type=str,
-        default="/mnt/i/MachineLearning/train-scene-classification/mountains_val",
+        default="/mnt/i/MachineLearning/train-scene-classification/mountain_val",
         help="Path to dataset directory, containing images to test with",
     )
     return parser.parse_args()
