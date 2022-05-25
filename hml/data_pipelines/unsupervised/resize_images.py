@@ -118,7 +118,7 @@ class ResizeDataset:
             )
             # yield from map(normalise, permute_flips(image_crop))
            # yield from map(normalise, permute_flips(image_resized, flip_y=False))
-             yield normalise(image_crop)
+            yield normalise(image_crop)
 
     def find_training_images(self) -> Iterable[str]:
         """
