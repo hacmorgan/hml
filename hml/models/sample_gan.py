@@ -669,8 +669,8 @@ def main(
     #     name=None,
     # )
     generator_lr = LRS(
-        max_lr=3e-5,
-        min_lr=1e-6,
+        max_lr=3e-4,
+        min_lr=3e-5,
         start_decay_epoch=50,
         stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
