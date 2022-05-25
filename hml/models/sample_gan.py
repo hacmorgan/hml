@@ -76,7 +76,6 @@ def save_tensor_image(image: tf.Tensor, path: str) -> None:
         image: Image as tf Tensor
         path: Path to save image to
     """
-    print(tf.shape(image))
     PIL.Image.fromarray((image.numpy() * 255.0).astype(np.uint8)[0, ...]).save(path)
 
 
@@ -348,6 +347,46 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
         )
 
 
+def decide_who_trains(
+    should_train_generator: bool,
+    should_train_discriminator: bool,
+    this_generator_loss: float,
+    last_generator_loss: float,
+    switch_training_loss_delta: float = 0.1,
+    start_training_generator_loss_threshold: float = 1.0,
+    start_training_discriminator_loss_threshold: float = 0.1,
+) -> Tuple[bool, bool]:
+    """
+    Decide which network should train and which should be frozen
+
+    This is determined based on both an absolute loss threshold and a delta loss
+    threshold. If after training for an epoch, the generator loss has passed the
+    relevant absolute threshold, or the generator loss has not changed significantly, we
+    switch to training the other network.
+    """
+    loss_delta = abs(this_generator_loss - last_generator_loss)
+    if should_train_discriminator == should_train_generator:
+        should_train_generator = False
+        should_train_discriminator = True
+    elif (
+        should_train_discriminator
+        and this_generator_loss < start_training_generator_loss_threshold
+        and loss_delta > switch_training_loss_delta
+    ):
+        print("Not switching who trains, discriminator still learning")
+    elif (
+        should_train_generator
+        and this_generator_loss > start_training_discriminator_loss_threshold
+        and loss_delta > switch_training_loss_delta
+    ):
+        print("Not switching who trains, generator still learning")
+    else:
+        should_train_generator = not should_train_generator
+        should_train_discriminator = not should_train_discriminator
+        print("Switching who trains")
+    print(f"{should_train_generator=}, {should_train_discriminator=}")
+
+
 def train(
     generator: tf.keras.models.Model,
     discriminator: tf.keras.models.Model,
@@ -463,8 +502,9 @@ def train(
     )
 
     # Start by training both networks
-    should_train_generator = True
-    should_train_discriminator = False
+    should_train_generator = False
+    should_train_discriminator = True
+    last_generator_loss = 0
 
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
@@ -546,24 +586,14 @@ def train(
             plt.close("all")
 
         # Switch who trains if appropriate
-        if should_train_discriminator == should_train_generator:
-            should_train_generator = False
-            should_train_discriminator = True
-        elif (
-            should_train_discriminator
-            and generator_loss_metric.result() < generator_loss_start_training_threshold
-        ):
-            print("Not switching who trains, discriminator fooled too easily")
-        elif (
-            should_train_generator
-            and generator_loss_metric.result() > generator_loss_stop_training_threshold
-        ):
-            print("Not switching who trains, unable to fool discriminator")
-        else:
-            should_train_generator = not should_train_generator
-            should_train_discriminator = not should_train_discriminator
-            print("Switching who trains")
-        print(f"{should_train_generator=}, {should_train_discriminator=}")
+        this_generator_loss = generator_loss_metric.result()
+        should_train_generator, should_train_discriminator = decide_who_trains(
+            should_train_generator=should_train_generator,
+            should_train_discriminator=should_train_discriminator,
+            this_generator_loss=this_generator_loss,
+            last_generator_loss=last_generator_loss,
+        )
+        last_generator_loss = this_generator_loss
 
         # Reset metrics every epoch
         generator_loss_metric.reset_states()
