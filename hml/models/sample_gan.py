@@ -708,7 +708,7 @@ def main(
         steps_per_epoch=STEPS_PER_EPOCH,
     )
     discriminator_lr = LRS(
-        max_lr=3e-5,
+        max_lr=1e-5,
         min_lr=1e-6,
         start_decay_epoch=50,
         stop_decay_epoch=1500,
