@@ -661,7 +661,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 1000,
-    batch_size: int = 64,
+    batch_size: int = 128,
     latent_dim: int = 128,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
