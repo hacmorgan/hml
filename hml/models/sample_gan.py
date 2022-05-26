@@ -692,7 +692,8 @@ def main(
                          generator. Noise used if None
         save_generator_output: Save generated images instead of displaying
     """
-    STEPS_PER_EPOCH = 190  # expanded pixel_art - 128 crops - minibatch size 64 - no aug
+    # STEPS_PER_EPOCH = 190  # expanded pixel_art - 128 crops - minibatch size 64 - no aug
+    STEPS_PER_EPOCH = 85  # expanded pixel_art - 128 crops - minibatch size 128 - no aug
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
