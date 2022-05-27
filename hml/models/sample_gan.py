@@ -600,6 +600,9 @@ def train(
         generator_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
 
+        # Try to plug memory leak
+        del (consistent_generated, random_generated)
+
 
 def generate(
     autoencoder: tf.keras.models.Model,
