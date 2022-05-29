@@ -15,6 +15,7 @@ import argparse
 import datetime
 import math
 import os
+import random
 import subprocess
 import sys
 import time
@@ -157,15 +158,20 @@ def sample_minibatch(
         low=0, high=num_images, size=minibatch_size
     ).astype(int)
 
-    # Return stacked tiles
-    return tf.stack(
-        values=[
+    # Make shuffled list of tiles
+    tiles = random.shuffle(
+        [
             fullsize_generated_images[src_img, y : y + tile_size, x : x + tile_size, :]
             # for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
             for src_img in range(num_images)
             for y in range(0, tile_max_y, tile_size)
             for x in range(0, tile_max_x, tile_size)
-        ],
+        ]
+    )
+
+    # Return first minibatch of shuffled tiles, stacked
+    return tf.stack(
+        values=tiles[:minibatch_size],
         axis=0,
     )
 
@@ -709,7 +715,7 @@ def main(
     generator_lr = LRS(
         max_lr=3e-4,
         min_lr=3e-5,
-        start_decay_epoch=50,
+        start_decay_epoch=1000,
         stop_decay_epoch=3000,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
