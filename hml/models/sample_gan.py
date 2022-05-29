@@ -625,8 +625,8 @@ def train(
         generator_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
 
-        # Try to plug memory leak
-        del (consistent_generated, random_generated)
+        # Try to find memory leak
+        print(f"{sorted_locals=}", file=sys.stderr)
 
 
 def generate(
