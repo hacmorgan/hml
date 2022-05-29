@@ -9,7 +9,7 @@ Generative adversarial network to generate pixel art wallpapers
 __author__ = "Hamish Morgan"
 
 
-from typing import Iterable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Iterable, Dict, Iterator, List, Optional, Tuple
 
 import argparse
 import datetime
@@ -127,9 +127,12 @@ def generate_and_save_images(
     return consistent_generation, random_generation
 
 
-def sorted_locals() -> Iterator[Tuple[int, int]]:
+def sorted_locals(locals_: Dict[str, Any]) -> Iterator[Tuple[int, int]]:
     """
     Sort local variables that don't start with underscores by their size
+
+    Params:
+        locals_: Return value of locals() in target environment
 
     Returns:
         List of (variable name, size in bytes) sorted by size
@@ -137,7 +140,7 @@ def sorted_locals() -> Iterator[Tuple[int, int]]:
     return sorted(
         [
             (key, sys.getsizeof(value))
-            for key, value in locals().items()
+            for key, value in locals_.items()
             if not key.startswith("_")
         ],
         key=lambda elem: elem[1],
@@ -626,7 +629,10 @@ def train(
         discriminator_loss_metric.reset_states()
 
         # Try to find memory leak
-        print(f"{sorted_locals()=}", file=sys.stderr)
+        print(
+            "\n".join(f"{key}: {value}" for key, value in sorted_locals(locals())),
+            file=sys.stderr,
+        )
 
 
 def generate(
