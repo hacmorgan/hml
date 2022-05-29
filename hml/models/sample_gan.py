@@ -630,9 +630,7 @@ def train(
 
         # Try to find memory leak
         print(
-            "\n".join(
-                f"{key}: {value}" for key, value in sorted_locals(locals()).items()
-            ),
+            "\n".join(f"{key}: {value}" for key, value in sorted_locals(locals())),
             file=sys.stderr,
         )
 
