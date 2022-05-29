@@ -127,12 +127,15 @@ def generate_and_save_images(
     return consistent_generation, random_generation
 
 
-def sorted_locals(locals_: Dict[str, Any]) -> Iterator[Tuple[int, int]]:
+def sorted_locals(
+    locals_: Dict[str, Any], exclude_prefix: Optional[str] = "_"
+) -> Iterator[Tuple[int, int]]:
     """
     Sort local variables that don't start with underscores by their size
 
     Params:
         locals_: Return value of locals() in target environment
+        exclude_prefix: Exclude variables whose names start with this
 
     Returns:
         List of (variable name, size in bytes) sorted by size
@@ -141,7 +144,7 @@ def sorted_locals(locals_: Dict[str, Any]) -> Iterator[Tuple[int, int]]:
         [
             (key, sys.getsizeof(value))
             for key, value in locals_.items()
-            if not key.startswith("_")
+            if exclude_prefix is None or not key.startswith(exclude_prefix)
         ],
         key=lambda elem: elem[1],
     )
@@ -630,7 +633,10 @@ def train(
 
         # Try to find memory leak
         print(
-            "\n".join(f"{key}: {value}" for key, value in sorted_locals(locals())),
+            "\n".join(
+                f"{key}: {value}"
+                for key, value in sorted_locals(locals(), exclude_prefix=None)
+            ),
             file=sys.stderr,
         )
 
