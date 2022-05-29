@@ -161,7 +161,10 @@ def sample_minibatch(
     return tf.stack(
         values=[
             fullsize_generated_images[src_img, y : y + tile_size, x : x + tile_size, :]
-            for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
+            # for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
+            for src_img in range(num_images)
+            for y in range(0, tile_max_y, tile_size)
+            for x in range(0, tile_max_x, tile_size)
         ],
         axis=0,
     )
