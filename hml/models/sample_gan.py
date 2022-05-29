@@ -626,7 +626,7 @@ def train(
         discriminator_loss_metric.reset_states()
 
         # Try to find memory leak
-        print(f"{sorted_locals=}", file=sys.stderr)
+        print(f"{sorted_locals()=}", file=sys.stderr)
 
 
 def generate(
