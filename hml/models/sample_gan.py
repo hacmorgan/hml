@@ -710,14 +710,14 @@ def main(
         max_lr=3e-4,
         min_lr=3e-5,
         start_decay_epoch=50,
-        stop_decay_epoch=1500,
+        stop_decay_epoch=3000,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
     discriminator_lr = LRS(
         max_lr=1e-5,
         min_lr=1e-6,
         start_decay_epoch=50,
-        stop_decay_epoch=1500,
+        stop_decay_epoch=3000,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
     # lr = tfa.optimizers.CyclicalLearningRate(
@@ -735,7 +735,7 @@ def main(
         weight_decay=1e-7, learning_rate=generator_lr
     )
     discriminator_optimizer = tfa.optimizers.AdamW(
-        weight_decay=1e-6, learning_rate=discriminator_lr
+        weight_decay=1e-5, learning_rate=discriminator_lr
     )
     # optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
