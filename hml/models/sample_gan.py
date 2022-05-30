@@ -151,25 +151,27 @@ def sorted_locals(
 
 
 def sample_minibatch(
-    fullsize_generated_images: tf.Tensor,
+    fullsize_generated_images: List[tf.Tensor],
     minibatch_shape: tf.TensorShape,
-    num_fullsize_generations: int,
 ) -> tf.Tensor:
     """
     From a spatially large image, randomly sample smaller tiles of a given shape
 
-    This helps to allow training a big generator with a small discriminator
+    This helps to allow training a big generator with a small discriminator.
+
+    Note that fullsize_generated images is a list of tensors because one huge tensor
+    doesn't fit on the GPU
 
     Args:
-        images: Large images as tensors (Num images x X x Y x Channels)
+        images: Large images [(1 x X x Y x Channels)]
         minibatch_shape: Required output shape
-        num_fullsize_generations: Number of full-sized images were generated
 
     Returns:
         Tiles randomly sampled from large images
     """
     # Extract relevant dimensions
-    num_images, image_height, image_width, _ = tf.shape(fullsize_generated_images)
+    num_images = len(fullsize_generated_images)
+    _, image_height, image_width, _ = tf.shape(fullsize_generated_images[0])
     minibatch_size, tile_size, _, _ = minibatch_shape
 
     # Sample tiles randomly from full size image
@@ -185,13 +187,13 @@ def sample_minibatch(
         low=0, high=num_images, size=int(minibatch_size / 2)
     ).astype(int)
     random_tiles = [
-        fullsize_generated_images[src_img, y : y + tile_size, x : x + tile_size, :]
+        fullsize_generated_images[src_img][0, y : y + tile_size, x : x + tile_size, :]
         for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
     ]
 
     # Make shuffled list of tiles
     grid_tiles = [
-        fullsize_generated_images[src_img, y : y + tile_size, x : x + tile_size, :]
+        fullsize_generated_images[src_img][0, y : y + tile_size, x : x + tile_size, :]
         # for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
         for src_img in range(num_images)
         for y in range(0, tile_max_y, tile_size)
@@ -245,7 +247,7 @@ def compute_discriminator_loss(
 
 # @tf.function
 def train_step(
-    images: tf.Tensor,
+    train_images: tf.Tensor,
     generator: tf.keras.models.Model,
     discriminator: tf.keras.models.Model,
     generator_optimizer: "Optimizer",
@@ -253,7 +255,9 @@ def train_step(
     loss_metrics: Dict[str, "Metrics"],
     should_train_generator: bool,
     should_train_discriminator: bool,
-    num_fullsize_generations: int = 6,
+    generated_images: List[tf.Tensor] = [],
+    experience_replay_buffer: int = 5,
+    num_fullsize_generations: int = 1,
 ) -> None:
     """
     Perform one step of training
@@ -275,18 +279,22 @@ def train_step(
 
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
 
-        # Generate images
-        generated_images = generator(noise, training=True)
+        # Generate a new full-size image
+        generated_image = generator(noise, training=True)
+
+        # Add it to the experience replay list
+        generated_images.append(generated_image)
+        if len(generated_images) > experience_replay_buffer:
+            generated_images = generated_images[-experience_replay_buffer:]
 
         # Get a random sample of blocks from generated images
         generated_minibatch = sample_minibatch(
             generated_images,
-            minibatch_shape=tf.shape(images),
-            num_fullsize_generations=num_fullsize_generations,
+            minibatch_shape=tf.shape(train_images),
         )
 
         # Pass real and fake images through discriminator
-        real_output = discriminator(images, training=True)
+        real_output = discriminator(train_images, training=True)
         generated_output = discriminator(generated_minibatch, training=True)
 
         # Compute losses
@@ -314,6 +322,8 @@ def train_step(
     # Log losses to their respective metrics
     loss_metrics["generator_loss"](generator_loss)
     loss_metrics["discriminator_loss"](discriminator_loss)
+
+    return generated_images
 
 
 class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -554,13 +564,16 @@ def train(
     should_train_discriminator = True
     last_generator_loss = 0
 
+    # Experience replay buffer
+    generated_images = []
+
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
 
         for step, image_batch in enumerate(train_images):
             # Perform training step
-            train_step(
-                images=image_batch,
+            generated_images = train_step(
+                train_images=image_batch,
                 generator=generator,
                 discriminator=discriminator,
                 generator_optimizer=generator_optimizer,
@@ -571,6 +584,7 @@ def train(
                 },
                 should_train_generator=should_train_generator,
                 should_train_discriminator=should_train_discriminator,
+                generated_images=generated_images,
             )
 
             if step % 5 == 0:
@@ -647,14 +661,14 @@ def train(
         generator_loss_metric.reset_states()
         discriminator_loss_metric.reset_states()
 
-        # Try to find memory leak
-        print(
-            "\n".join(
-                f"{key}: {value}"
-                for key, value in sorted_locals(locals(), exclude_prefix=None)
-            ),
-            file=sys.stderr,
-        )
+        # # Try to find memory leak
+        # print(
+        #     "\n".join(
+        #         f"{key}: {value}"
+        #         for key, value in sorted_locals(locals(), exclude_prefix=None)
+        #     ),
+        #     file=sys.stderr,
+        # )
 
 
 def generate(
@@ -717,7 +731,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (256, 256, 3),
     buffer_size: int = 10000,
-    batch_size: int = 180,
+    batch_size: int = 128,
     latent_dim: int = 128,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
@@ -749,7 +763,7 @@ def main(
         save_generator_output: Save generated images instead of displaying
     """
     # STEPS_PER_EPOCH = 190  # expanded pixel_art - 128 crops - minibatch size 64 - no aug
-    STEPS_PER_EPOCH = 85  # expanded pixel_art - 128 crops - minibatch size 128 - no aug
+    STEPS_PER_EPOCH = 30  # expanded pixel_art - 256 crops - minibatch size 128 - no aug
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
