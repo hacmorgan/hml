@@ -38,7 +38,7 @@ from hml.architectures.convolutional.generators.sample_gan_generator import (
     GENERATOR_LATENT_DIM,
 )
 
-from hml.architectures.convolutional.discriminators.sample_gan_discriminator_256 import (
+from hml.architectures.convolutional.discriminators.sample_gan_discriminator import (
     model as discriminator_model,
 )
 
@@ -256,7 +256,7 @@ def train_step(
     should_train_generator: bool,
     should_train_discriminator: bool,
     generated_images: List[tf.Tensor] = [],
-    experience_replay_buffer: int = 5,
+    experience_replay_buffer: int = 1,
     num_fullsize_generations: int = 1,
 ) -> None:
     """
@@ -729,9 +729,9 @@ def main(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (256, 256, 3),
+    train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 10000,
-    batch_size: int = 128,
+    batch_size: int = 256,
     latent_dim: int = 128,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
@@ -763,7 +763,8 @@ def main(
         save_generator_output: Save generated images instead of displaying
     """
     # STEPS_PER_EPOCH = 190  # expanded pixel_art - 128 crops - minibatch size 64 - no aug
-    STEPS_PER_EPOCH = 30  # expanded pixel_art - 256 crops - minibatch size 128 - no aug
+    # STEPS_PER_EPOCH = 30  # expanded pixel_art - 256 crops - minibatch size 128 - no aug
+    STEPS_PER_EPOCH = 45  # expanded pixel_art - 128 crops - minibatch size 256 - no aug
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
