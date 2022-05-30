@@ -769,7 +769,7 @@ def main(
         weight_decay=1e-7, learning_rate=generator_lr
     )
     discriminator_optimizer = tfa.optimizers.AdamW(
-        weight_decay=1e-5, learning_rate=discriminator_lr
+        weight_decay=1e-4, learning_rate=discriminator_lr
     )
     # optimizer = tf.keras.optimizers.Adam(clr)
     # step = tf.Variable(0, trainable=False)
