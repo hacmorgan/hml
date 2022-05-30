@@ -38,7 +38,7 @@ from hml.architectures.convolutional.generators.sample_gan_generator import (
     GENERATOR_LATENT_DIM,
 )
 
-from hml.architectures.convolutional.discriminators.sample_gan_discriminator import (
+from hml.architectures.convolutional.discriminators.sample_gan_discriminator_256 import (
     model as discriminator_model,
 )
 
@@ -175,25 +175,33 @@ def sample_minibatch(
     # Sample tiles randomly from full size image
     tile_max_y = image_height - tile_size
     tile_max_x = image_width - tile_size
-    tile_ys = np.random.uniform(low=0, high=tile_max_y, size=minibatch_size).astype(int)
-    tile_xs = np.random.uniform(low=0, high=tile_max_x, size=minibatch_size).astype(int)
-    tile_source_images = np.random.uniform(
-        low=0, high=num_images, size=minibatch_size
+    tile_ys = np.random.uniform(
+        low=0, high=tile_max_y, size=int(minibatch_size / 2)
     ).astype(int)
+    tile_xs = np.random.uniform(
+        low=0, high=tile_max_x, size=int(minibatch_size / 2)
+    ).astype(int)
+    tile_source_images = np.random.uniform(
+        low=0, high=num_images, size=int(minibatch_size / 2)
+    ).astype(int)
+    random_tiles = [
+        fullsize_generated_images[src_img, y : y + tile_size, x : x + tile_size, :]
+        for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
+    ]
 
     # Make shuffled list of tiles
-    tiles = [
+    grid_tiles = [
         fullsize_generated_images[src_img, y : y + tile_size, x : x + tile_size, :]
         # for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
         for src_img in range(num_images)
         for y in range(0, tile_max_y, tile_size)
         for x in range(0, tile_max_x, tile_size)
     ]
-    random.shuffle(tiles)
+    random.shuffle(grid_tiles)
 
     # Return first minibatch of shuffled tiles, stacked
     return tf.stack(
-        values=tiles[:minibatch_size],
+        values=random_tiles + grid_tiles[: int(minibatch_size / 2)],
         axis=0,
     )
 
@@ -245,7 +253,7 @@ def train_step(
     loss_metrics: Dict[str, "Metrics"],
     should_train_generator: bool,
     should_train_discriminator: bool,
-    num_fullsize_generations: int = 1,
+    num_fullsize_generations: int = 6,
 ) -> None:
     """
     Perform one step of training
@@ -259,7 +267,8 @@ def train_step(
         loss_metrics: Dictionary of metrics to log
         should_train_generator: Update generator weights if True, leave static otherwise
         should_train_discriminator: Update discriminator weights if True, leave static
-                                    otherwise
+            otherwise
+        num_fullsize_generations: Number of full-size images to generate and sample from
     """
     # Generate a new seed to generate a set of new images
     noise = tf.random.normal([num_fullsize_generations, GENERATOR_LATENT_DIM])
@@ -338,8 +347,10 @@ class LRS(tf.keras.optimizers.schedules.LearningRateSchedule):
             step: Which training step we are up to
             max_lr: Initial value of lr
             min_lr: Final value of lr
-            start_decay_epoch: Stay at max_lr until this many epochs have passed, then start decaying
-            stop_decay_epoch: Reach min_lr after this many epochs have passed, and stop decaying
+            start_decay_epoch: Stay at max_lr until this many epochs have passed, then
+                start decaying
+            stop_decay_epoch: Reach min_lr after this many epochs have passed, and stop
+                decaying
 
         Returns:
             Learning rate schedule object
@@ -390,10 +401,15 @@ def decide_who_trains(
     """
     Decide which network should train and which should be frozen
 
-    This is determined based on both an absolute loss threshold and a delta loss
-    threshold. If after training for an epoch, the generator loss has passed the
-    relevant absolute threshold, or the generator loss has not changed significantly, we
-    switch to training the other network.
+    This is determined based on both absolute loss and the change in loss since the last
+    epoch. If after training for an epoch, the generator loss has passed the relevant
+    absolute threshold, or the generator loss has not changed significantly, we switch
+    to training the other network.
+
+    n.b. these determinations are made on the generator's loss instead of the
+    discriminator's, because the generator is purely trying to fool the discriminator,
+    while the discriminator is also trying to learn to classify real images, which it
+    tends to get pretty good at, meaning its loss trends downward, at least to a point.
     """
     loss_delta = abs(this_generator_loss - last_generator_loss)
     if should_train_discriminator == should_train_generator:
@@ -699,9 +715,9 @@ def main(
     dataset_path: str,
     val_path: str,
     epochs: int = 20000,
-    train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
-    buffer_size: int = 1000,
-    batch_size: int = 128,
+    train_crop_shape: Tuple[int, int, int] = (256, 256, 3),
+    buffer_size: int = 10000,
+    batch_size: int = 180,
     latent_dim: int = 128,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
