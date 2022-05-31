@@ -203,7 +203,8 @@ def sample_minibatch(
 
     # Return first minibatch of shuffled tiles, stacked
     return tf.stack(
-        values=random_tiles + grid_tiles[: int(minibatch_size / 2)],
+        # values=random_tiles + grid_tiles[: int(minibatch_size / 2)],
+        values=grid_tiles[:minibatch_size],
         axis=0,
     )
 
