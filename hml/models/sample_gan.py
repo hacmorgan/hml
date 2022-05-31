@@ -257,7 +257,7 @@ def train_step(
     should_train_generator: bool,
     should_train_discriminator: bool,
     generated_images: List[tf.Tensor] = [],
-    experience_replay_buffer: int = 1,
+    experience_replay_buffer: int = 10,
     num_fullsize_generations: int = 1,
 ) -> None:
     """
