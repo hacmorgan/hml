@@ -203,10 +203,17 @@ def sample_minibatch(
 
     # Return first minibatch of shuffled tiles, stacked
     return tf.stack(
-        # values=random_tiles + grid_tiles[: int(minibatch_size / 2)],
-        values=grid_tiles[:minibatch_size],
+        values=random_tiles + grid_tiles[: int(minibatch_size / 2)],
+        # values=grid_tiles[:minibatch_size],
         axis=0,
     )
+
+
+def stack_minibatch(minibatch: tf.Tensor) -> tf.Tensor:
+    """
+    Stack an N x H x W x C minibatch into a 1 x H x W x NC tensor
+    """
+    return tf.expand_dims(tf.concat([img for img in minibatch], axis=2), axis=0)
 
 
 def compute_generator_loss(generated_output: tf.Tensor) -> float:
@@ -257,7 +264,7 @@ def train_step(
     should_train_generator: bool,
     should_train_discriminator: bool,
     generated_images: List[tf.Tensor] = [],
-    experience_replay_buffer: int = 10,
+    experience_replay_buffer: int = 1,
     num_fullsize_generations: int = 1,
 ) -> None:
     """
@@ -295,8 +302,10 @@ def train_step(
         )
 
         # Pass real and fake images through discriminator
-        real_output = discriminator(train_images, training=True)
-        generated_output = discriminator(generated_minibatch, training=True)
+        real_output = discriminator(stack_minibatch(train_images), training=True)
+        generated_output = discriminator(
+            stack_minibatch(generated_minibatch), training=True
+        )
 
         # Compute losses
         discriminator_loss = compute_discriminator_loss(real_output, generated_output)
@@ -572,6 +581,14 @@ def train(
         start = time.time()
 
         for step, image_batch in enumerate(train_images):
+            # Pad input if incomplete minibatch
+            num_images_in_batch = image_batch.shape[0]
+            if num_images_in_batch < batch_size:
+                padding_images = tf.zeros(
+                    [batch_size - num_images_in_batch] + image_batch.shape[1:]
+                )
+                image_batch = tf.concat([image_batch, padding_images], axis=0)
+
             # Perform training step
             generated_images = train_step(
                 train_images=image_batch,
@@ -588,7 +605,7 @@ def train(
                 generated_images=generated_images,
             )
 
-            if step % 5 == 0:
+            if step % 1 == 0:
                 print(
                     UPDATE_TEMPLATE.format(
                         # Epoch/step info
@@ -732,7 +749,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 10000,
-    batch_size: int = 256,
+    batch_size: int = 128,
     latent_dim: int = 128,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
@@ -765,7 +782,8 @@ def main(
     """
     # STEPS_PER_EPOCH = 190  # expanded pixel_art - 128 crops - minibatch size 64 - no aug
     # STEPS_PER_EPOCH = 30  # expanded pixel_art - 256 crops - minibatch size 128 - no aug
-    STEPS_PER_EPOCH = 45  # expanded pixel_art - 128 crops - minibatch size 256 - no aug
+    # STEPS_PER_EPOCH = 45  # expanded pixel_art - 128 crops - minibatch size 256 - no aug
+    STEPS_PER_EPOCH = 85  # expanded pixel_art - 128 crops - minibatch size 128 - no aug
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
@@ -794,7 +812,9 @@ def main(
     # )
 
     generator = generator_model()
-    discriminator = discriminator_model(input_shape=train_crop_shape)
+    discriminator = discriminator_model(
+        input_shape=train_crop_shape[:2] + (batch_size * train_crop_shape[2],)
+    )
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
     generator_optimizer = tfa.optimizers.AdamW(
