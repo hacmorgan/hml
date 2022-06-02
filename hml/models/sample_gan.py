@@ -194,7 +194,6 @@ def sample_minibatch(
     # Make shuffled list of tiles
     grid_tiles = [
         fullsize_generated_images[src_img][0, y : y + tile_size, x : x + tile_size, :]
-        # for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
         for src_img in range(num_images)
         for y in range(0, tile_max_y, tile_size)
         for x in range(0, tile_max_x, tile_size)
@@ -203,8 +202,8 @@ def sample_minibatch(
 
     # Return first minibatch of shuffled tiles, stacked
     return tf.stack(
-        values=random_tiles + grid_tiles[: int(minibatch_size / 2)],
-        # values=grid_tiles[:minibatch_size],
+        # values=random_tiles + grid_tiles[: int(minibatch_size / 2)],
+        values=grid_tiles[:minibatch_size],
         axis=0,
     )
 
@@ -749,7 +748,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 10000,
-    batch_size: int = 128,
+    batch_size: int = 64,
     latent_dim: int = 128,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
@@ -783,7 +782,7 @@ def main(
     # STEPS_PER_EPOCH = 190  # expanded pixel_art - 128 crops - minibatch size 64 - no aug
     # STEPS_PER_EPOCH = 30  # expanded pixel_art - 256 crops - minibatch size 128 - no aug
     # STEPS_PER_EPOCH = 45  # expanded pixel_art - 128 crops - minibatch size 256 - no aug
-    STEPS_PER_EPOCH = 85  # expanded pixel_art - 128 crops - minibatch size 128 - no aug
+    STEPS_PER_EPOCH = 95  # expanded pixel_art - 128 crops - minibatch size 128 - no aug
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
@@ -791,8 +790,8 @@ def main(
     #     name=None,
     # )
     generator_lr = LRS(
-        max_lr=3e-4,
-        min_lr=3e-5,
+        max_lr=1e-5,
+        min_lr=3e-6,
         start_decay_epoch=1000,
         stop_decay_epoch=3000,
         steps_per_epoch=STEPS_PER_EPOCH,
