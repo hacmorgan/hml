@@ -151,7 +151,7 @@ def sorted_locals(
 
 
 def sample_minibatch(
-    fullsize_generated_images: List[tf.Tensor],
+    fullsize_generated_images: tf.Tensor,
     minibatch_shape: tf.TensorShape,
 ) -> tf.Tensor:
     """
@@ -170,40 +170,39 @@ def sample_minibatch(
         Tiles randomly sampled from large images
     """
     # Extract relevant dimensions
-    num_images = len(fullsize_generated_images)
-    _, image_height, image_width, _ = tf.shape(fullsize_generated_images[0])
+    num_images, image_height, image_width, _ = tf.shape(fullsize_generated_images)
     minibatch_size, tile_size, _, _ = minibatch_shape
 
     # Sample tiles randomly from full size image
+    # num_random_tiles = int(minibatch_size / 2)
     tile_max_y = image_height - tile_size
     tile_max_x = image_width - tile_size
     tile_ys = np.random.uniform(
-        low=0, high=tile_max_y, size=int(minibatch_size / 2)
+        low=0, high=tile_max_y, size=num_images
     ).astype(int)
     tile_xs = np.random.uniform(
-        low=0, high=tile_max_x, size=int(minibatch_size / 2)
+        low=0, high=tile_max_x, size=num_images
     ).astype(int)
-    tile_source_images = np.random.uniform(
-        low=0, high=num_images, size=int(minibatch_size / 2)
-    ).astype(int)
+    tile_source_images = range(num_images)
     random_tiles = [
-        fullsize_generated_images[src_img][0, y : y + tile_size, x : x + tile_size, :]
+        fullsize_generated_images[0, y : y + tile_size, x : x + tile_size, :]
         for src_img, y, x in zip(tile_source_images, tile_ys, tile_xs)
     ]
 
-    # Make shuffled list of tiles
-    grid_tiles = [
-        fullsize_generated_images[src_img][0, y : y + tile_size, x : x + tile_size, :]
-        for src_img in range(num_images)
-        for y in range(0, tile_max_y, tile_size)
-        for x in range(0, tile_max_x, tile_size)
-    ]
-    random.shuffle(grid_tiles)
+    # # Make shuffled list of tiles
+    # grid_tiles = [
+    #     fullsize_generated_images[src_img][0, y : y + tile_size, x : x + tile_size, :]
+    #     for src_img in range(num_images)
+    #     for y in range(0, tile_max_y, tile_size)
+    #     for x in range(0, tile_max_x, tile_size)
+    # ]
+    # random.shuffle(grid_tiles)
 
     # Return first minibatch of shuffled tiles, stacked
     return tf.stack(
         # values=random_tiles + grid_tiles[: int(minibatch_size / 2)],
-        values=grid_tiles[:minibatch_size],
+        # values=grid_tiles[:minibatch_size],
+        values=random_tiles,
         axis=0,
     )
 
@@ -282,29 +281,27 @@ def train_step(
         num_fullsize_generations: Number of full-size images to generate and sample from
     """
     # Generate a new seed to generate a set of new images
-    noise = tf.random.normal([num_fullsize_generations, GENERATOR_LATENT_DIM])
+    noise = tf.random.normal([len(train_images), GENERATOR_LATENT_DIM])
 
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
 
         # Generate a new full-size image
-        generated_image = generator(noise, training=True)
+        generated_images = generator(noise, training=True)
 
-        # Add it to the experience replay list
-        generated_images.append(generated_image)
-        if len(generated_images) > experience_replay_buffer:
-            generated_images = generated_images[-experience_replay_buffer:]
+        # # Add it to the experience replay list
+        # generated_images.append(generated_image)
+        # if len(generated_images) > experience_replay_buffer:
+        #     generated_images = generated_images[-experience_replay_buffer:]
 
         # Get a random sample of blocks from generated images
-        generated_minibatch = sample_minibatch(
+        generated_images = sample_minibatch(
             generated_images,
             minibatch_shape=tf.shape(train_images),
         )
 
         # Pass real and fake images through discriminator
-        real_output = discriminator(stack_minibatch(train_images), training=True)
-        generated_output = discriminator(
-            stack_minibatch(generated_minibatch), training=True
-        )
+        real_output = discriminator(train_images, training=True)
+        generated_output = discriminator(generated_images, training=True)
 
         # Compute losses
         discriminator_loss = compute_discriminator_loss(real_output, generated_output)
@@ -748,7 +745,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 10000,
-    batch_size: int = 64,
+    batch_size: int = 1,
     latent_dim: int = 128,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
