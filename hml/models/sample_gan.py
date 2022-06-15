@@ -38,8 +38,8 @@ from hml.architectures.convolutional.generators.sample_gan_generator import (
     GENERATOR_LATENT_DIM,
 )
 
-from hml.architectures.convolutional.discriminators.sample_gan_discriminator import (
-    model as discriminator_model,
+from hml.architectures.convolutional.discriminators.sample_gan_discriminator_encoder import (
+    Discriminator,
 )
 
 from hml.data_pipelines.unsupervised.pixel_art_sigmoid import PixelArtSigmoidDataset
@@ -177,12 +177,8 @@ def sample_minibatch(
     # num_random_tiles = int(minibatch_size / 2)
     tile_max_y = image_height - tile_size
     tile_max_x = image_width - tile_size
-    tile_ys = np.random.uniform(
-        low=0, high=tile_max_y, size=num_images
-    ).astype(int)
-    tile_xs = np.random.uniform(
-        low=0, high=tile_max_x, size=num_images
-    ).astype(int)
+    tile_ys = np.random.uniform(low=0, high=tile_max_y, size=num_images).astype(int)
+    tile_xs = np.random.uniform(low=0, high=tile_max_x, size=num_images).astype(int)
     tile_source_images = range(num_images)
     random_tiles = [
         fullsize_generated_images[0, y : y + tile_size, x : x + tile_size, :]
@@ -214,17 +210,25 @@ def stack_minibatch(minibatch: tf.Tensor) -> tf.Tensor:
     return tf.expand_dims(tf.concat([img for img in minibatch], axis=2), axis=0)
 
 
-def compute_generator_loss(generated_output: tf.Tensor) -> float:
+def compute_generator_loss(
+    generated_output: tf.Tensor,
+    encodings: tf.Tensor,
+    encoding_similarity_weight: float = 1e0,
+) -> float:
     """
     Compute loss for training the generator
 
     Args:
         generated_output: Output of discriminator on generated images
+        encodings: Encoding of every block in the image
+        encoding_similarity_weight: Contribution of encoding similarity to loss
 
     Returns:
         Loss for training generator
     """
-    return bce(tf.ones_like(generated_output), generated_output)
+    output_crossentropy_loss = bce(tf.ones_like(generated_output), generated_output)
+    encoding_loss = -tf.math.reduce_variance(encodings)
+    return output_crossentropy_loss + encoding_similarity_weight * encoding_loss
 
 
 def compute_discriminator_loss(
@@ -288,6 +292,20 @@ def train_step(
         # Generate a new full-size image
         generated_images = generator(noise, training=True)
 
+        # Use the discriminator's encoder to encode each block of the image
+        _, image_height, image_width, _ = tf.shape(generated_images)
+        _, block_size, _, _ = tf.shape(train_images)
+        encodings = tf.concat(
+            [
+                discriminator.encode(
+                    generated_images[:, y : y + block_size, x : x + block_size, :]
+                )
+                for y in range(0, image_height - block_size, block_size)
+                for x in range(0, image_width - block_size, block_size)
+            ],
+            axis=0,
+        )
+
         # # Add it to the experience replay list
         # generated_images.append(generated_image)
         # if len(generated_images) > experience_replay_buffer:
@@ -305,7 +323,7 @@ def train_step(
 
         # Compute losses
         discriminator_loss = compute_discriminator_loss(real_output, generated_output)
-        generator_loss = compute_generator_loss(generated_output)
+        generator_loss = compute_generator_loss(generated_output, encodings)
 
     # Compute gradients from losses
     generator_gradients = gen_tape.gradient(
@@ -601,7 +619,7 @@ def train(
                 generated_images=generated_images,
             )
 
-            if step % 1 == 0:
+            if step % 5 == 0:
                 print(
                     UPDATE_TEMPLATE.format(
                         # Epoch/step info
@@ -779,7 +797,9 @@ def main(
     # STEPS_PER_EPOCH = 190  # expanded pixel_art - 128 crops - minibatch size 64 - no aug
     # STEPS_PER_EPOCH = 30  # expanded pixel_art - 256 crops - minibatch size 128 - no aug
     # STEPS_PER_EPOCH = 45  # expanded pixel_art - 128 crops - minibatch size 256 - no aug
-    STEPS_PER_EPOCH = 95  # expanded pixel_art - 128 crops - minibatch size 128 - no aug
+    STEPS_PER_EPOCH = (
+        12160  # expanded pixel_art - 128 crops - minibatch size 128 - no aug
+    )
 
     # lr = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
     #     boundaries=[STEPS_PER_EPOCH * epoch for epoch in (30, 200)],
@@ -787,8 +807,8 @@ def main(
     #     name=None,
     # )
     generator_lr = LRS(
-        max_lr=1e-6,
-        min_lr=3e-7,
+        max_lr=1e-7,
+        min_lr=3e-8,
         start_decay_epoch=1000,
         stop_decay_epoch=3000,
         steps_per_epoch=STEPS_PER_EPOCH,
@@ -808,9 +828,7 @@ def main(
     # )
 
     generator = generator_model()
-    discriminator = discriminator_model(
-        input_shape=train_crop_shape[:2] + (batch_size * train_crop_shape[2],)
-    )
+    discriminator = Discriminator()
     # autoencoder_optimizer = tf.keras.optimizers.Adam(lr)
     # discriminator_optimizer = tf.keras.optimizers.Adam(lr)
     generator_optimizer = tfa.optimizers.AdamW(
@@ -896,7 +914,7 @@ def get_args() -> argparse.Namespace:
         "--dataset",
         "-d",
         type=str,
-        default="/mnt/storage/ml/data/pixel-art/train",
+        default="/mnt/storage/ml/data/pixel-art/eboy",
         help="Path to dataset directory, containing training images",
     )
     parser.add_argument(
