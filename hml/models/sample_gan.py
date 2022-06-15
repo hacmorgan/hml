@@ -672,8 +672,8 @@ def train(
             tf.summary.image("Consistent generation", consistent_generated, step=epoch)
             tf.summary.image("Random generation", random_generated, step=epoch)
 
-        # Save the model every 15 epochs
-        if (epoch + 1) % 15 == 0:
+        # Save the model every 5 epochs
+        if (epoch + 1) % 5 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
             # Also close all pyplot figures. It is expensive to do this every epoch
@@ -807,14 +807,14 @@ def main(
     #     name=None,
     # )
     generator_lr = LRS(
-        max_lr=1e-7,
-        min_lr=3e-8,
+        max_lr=1e-5,
+        min_lr=3e-7,
         start_decay_epoch=1000,
         stop_decay_epoch=3000,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
     discriminator_lr = LRS(
-        max_lr=1e-6,
+        max_lr=1e-5,
         min_lr=1e-7,
         start_decay_epoch=50,
         stop_decay_epoch=3000,
