@@ -34,9 +34,9 @@ import tensorflow_datasets as tfds
 
 from hml.architectures.convolutional.autoencoders.vae import VAE
 
-from hml.architectures.convolutional.discriminators.avae_discriminator import (
-    model as discriminator_model,
-)
+# from hml.architectures.convolutional.discriminators.avae_discriminator import (
+#     model as discriminator_model,
+# )
 
 # from hml.architectures.convolutional.discriminators.avae_discriminator_3_block_input import (
 #     model as discriminator_model,

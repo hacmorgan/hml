@@ -213,7 +213,7 @@ def stack_minibatch(minibatch: tf.Tensor) -> tf.Tensor:
 def compute_generator_loss(
     generated_output: tf.Tensor,
     encodings: tf.Tensor,
-    encoding_similarity_weight: float = 1e0,
+    encoding_similarity_weight: float = 1e-1,
 ) -> float:
     """
     Compute loss for training the generator
@@ -285,7 +285,7 @@ def train_step(
         num_fullsize_generations: Number of full-size images to generate and sample from
     """
     # Generate a new seed to generate a set of new images
-    noise = tf.random.normal([len(train_images), GENERATOR_LATENT_DIM])
+    noise = tf.random.normal([num_fullsize_generations, GENERATOR_LATENT_DIM])
 
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
 
@@ -312,14 +312,14 @@ def train_step(
         #     generated_images = generated_images[-experience_replay_buffer:]
 
         # Get a random sample of blocks from generated images
-        generated_images = sample_minibatch(
+        generated_sample = sample_minibatch(
             generated_images,
             minibatch_shape=tf.shape(train_images),
         )
 
         # Pass real and fake images through discriminator
         real_output = discriminator(train_images, training=True)
-        generated_output = discriminator(generated_images, training=True)
+        generated_output = discriminator(generated_sample, training=True)
 
         # Compute losses
         discriminator_loss = compute_discriminator_loss(real_output, generated_output)
@@ -487,6 +487,7 @@ def train(
     buffer_size: int = 1000,
     generator_loss_stop_training_threshold: float = 1.0,
     generator_loss_start_training_threshold: float = 0.1,
+    save_checkpoint_frequency: int = 5,
     continue_from_checkpoint: Optional[str] = None,
     debug: bool = False,
 ) -> None:
@@ -511,13 +512,12 @@ def train(
         latent_dim: Number of noise inputs to generator
         num_examples_to_generate: How many examples to generate on each epoch
         discriminator_loss_start_training_threshold: Only switch to training
-                                                     discriminator if its loss is higher
-                                                     than this
+            discriminator if its loss is higher than this
         discriminator_loss_stop_training_threshold: Only switch to training autoencoder
-                                                    if discriminator loss is lower than
-                                                    this
+            if discriminator loss is lower than this
+        save_checkpoint_frequency: Number of epochs between checkpoints
         continue_from_checkpoint: Restore weights from checkpoint file if given, start
-                                  from scratch otherwise.
+            from scratch otherwise.
         debug: Don't die if code not committed (for testing)
     """
     # Skip git checks when debugging
@@ -559,7 +559,7 @@ def train(
 
     # Set starting and end epoch according to whether we are continuing training
     if continue_from_checkpoint is not None:
-        epoch_start = 15 * int(
+        epoch_start = save_checkpoint_frequency * int(
             continue_from_checkpoint.strip()[continue_from_checkpoint.rfind("-") + 1 :]
         )
     else:
@@ -673,7 +673,7 @@ def train(
             tf.summary.image("Random generation", random_generated, step=epoch)
 
         # Save the model every 5 epochs
-        if (epoch + 1) % 5 == 0:
+        if (epoch + 1) % save_checkpoint_frequency == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
             # Also close all pyplot figures. It is expensive to do this every epoch
@@ -763,7 +763,7 @@ def main(
     epochs: int = 20000,
     train_crop_shape: Tuple[int, int, int] = (128, 128, 3),
     buffer_size: int = 10000,
-    batch_size: int = 1,
+    batch_size: int = 32,
     latent_dim: int = 128,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
@@ -807,14 +807,14 @@ def main(
     #     name=None,
     # )
     generator_lr = LRS(
-        max_lr=1e-5,
+        max_lr=1e-4,
         min_lr=3e-7,
         start_decay_epoch=1000,
         stop_decay_epoch=3000,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
     discriminator_lr = LRS(
-        max_lr=1e-5,
+        max_lr=1e-4,
         min_lr=1e-7,
         start_decay_epoch=50,
         stop_decay_epoch=3000,

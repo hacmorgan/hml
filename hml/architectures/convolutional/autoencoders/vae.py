@@ -2,17 +2,8 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from hml.architectures.convolutional.decoders import (
-    # avae_decoder,
-    avae_decoder_128,
-    # avae_decoder_256,
-)
-from hml.architectures.convolutional.encoders import (
-    # avae_encoder,
-    avae_encoder_128,
-    # avae_encoder_256,
-    # sharpvae_encoder_3_block_input,
-)
+from hml.architectures.convolutional.decoders.fhd_decoder import Decoder
+from hml.architectures.convolutional.encoders.fhd_encoder import Encoder
 
 
 class VAE(tf.keras.models.Model):
@@ -35,10 +26,8 @@ class VAE(tf.keras.models.Model):
         super().__init__()
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
-        self.encoder_ = avae_encoder_128.model(
-            latent_dim=self.latent_dim_, input_shape=input_shape
-        )
-        self.decoder_ = avae_decoder_128.model(latent_dim=self.latent_dim_)
+        self.encoder_ = Encoder(latent_dim=self.latent_dim_, input_shape=input_shape)
+        self.decoder_ = Decoder(latent_dim=self.latent_dim_)
 
     def call(self, input_image: tf.Tensor) -> tf.Tensor:
         """
