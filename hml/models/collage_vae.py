@@ -697,7 +697,7 @@ def main(
     autoencoder_optimizer = tfa.optimizers.AdamW(
         weight_decay=1e-7, learning_rate=autoencoder_lr
     )
-    autoencoder.compile(optimizer=autoencoder_optimizer)
+    # autoencoder.compile(optimizer=autoencoder_optimizer)
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
