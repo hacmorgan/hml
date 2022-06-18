@@ -650,7 +650,7 @@ def main(
     model_dir: str,
     dataset_path: str,
     val_path: str,
-    epochs: int = 20000,
+    epochs: int = 2,
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     buffer_size: int = 1000,
     batch_size: int = 1,
