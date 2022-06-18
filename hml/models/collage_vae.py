@@ -60,7 +60,6 @@ def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
         generated_rgb_image = np.array((predictions[i, :, :, :] * 255.0)).astype(
             np.uint8
         )
-        # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.imshow(generated_rgb_image)
         plt.axis("off")
     plt.savefig(output_path, dpi=250)
@@ -98,6 +97,7 @@ def generate_and_save_images(
     #     target=generate_save_image, args=(predictions, output_path)
     # ).start()
     generate_save_image(predictions, output_path)
+    return predictions
 
 
 def show_reproduction_quality(
@@ -105,11 +105,11 @@ def show_reproduction_quality(
     epoch: int,
     test_images: tf.Tensor,
     reproductions_dir: str,
-) -> None:
+) -> tf.Tensor:
     """
     Generate and save images
     """
-    reproductions = autoencoder.call(test_images, training=False)
+    reproductions = autoencoder.call(test_images)
     print(f"{np.mean(reproductions)=}, {np.std(reproductions)=}")
     print(f"{np.mean(test_images)=}, {np.std(test_images)=}")
     output_path = os.path.join(
@@ -119,6 +119,7 @@ def show_reproduction_quality(
     #     target=reproduce_save_image, args=(test_images, reproductions, output_path)
     # ).start()
     reproduce_save_image(test_images, reproductions, output_path)
+    return reproductions
 
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
@@ -303,7 +304,7 @@ def train(
     epochs: int = 20000,
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     batch_size: int = 128,
-    latent_dim: int = 128,
+    latent_dim: int = 256,
     num_examples_to_generate: int = 16,
     continue_from_checkpoint: Optional[str] = None,
     debug: bool = False,
@@ -350,33 +351,23 @@ def train(
     # Shape of 3x3 blocks context region
     rows, cols, channels = output_shape
 
-    # # Pixel Art dataset
-    # train_images = (
-    #     tf.data.Dataset.from_generator(
-    #         UpscaleDataset(
-    #             dataset_path=dataset_path, output_shape=output_shape, num_examples=32
-    #         ),
-    #         output_signature=(tf.TensorSpec(shape=output_shape, dtype=tf.float32),),
-    #     )
-    #     .batch(batch_size)
-    #     .prefetch(tf.data.AUTOTUNE)
-    # )
-    # val_images = tf.data.Dataset.from_generator(
-    # UpscaleDataset(
-    #     dataset_path=val_path, output_shape=output_shape, num_examples=32
-    # ),
-    #     output_signature=(tf.TensorSpec(shape=output_shape, dtype=tf.float32),),
-    # ).batch(batch_size)
-
-    train_ds = UpscaleDataset(
-        dataset_path=dataset_path, output_shape=output_shape, num_examples=32
+    # Pixel Art dataset
+    train_images = (
+        tf.data.Dataset.from_generator(
+            UpscaleDataset(
+                dataset_path=dataset_path, output_shape=output_shape, num_examples=32
+            ),
+            output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
+        )
+        .batch(batch_size)
+        .prefetch(tf.data.AUTOTUNE)
     )
-    val_ds = UpscaleDataset(
-        dataset_path=val_path, output_shape=output_shape, num_examples=32
-    )
-
-    train_images = train_ds()
-    val_images = val_ds()
+    val_images = tf.data.Dataset.from_generator(
+        UpscaleDataset(
+            dataset_path=val_path, output_shape=output_shape, num_examples=32
+        ),
+        output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
+    ).batch(batch_size)
 
     # Save a few images for visualisation
     train_test_image_batch = next(iter(train_images))
@@ -425,8 +416,8 @@ def train(
     for epoch in range(epoch_start, epoch_stop):
         start = time.time()
 
-        # for step, (image_batch, label_batch) in enumerate(train_images):
-        for step, image_batch in enumerate(train_ds()):
+        for step, image_batch in enumerate(train_images):
+            # for step, image_batch in enumerate(train_ds()):
             # Perform training step
             train_step(
                 images=image_batch,
@@ -564,6 +555,8 @@ def train(
         kl_loss_metric.reset_states()
         generation_sharpness_loss_metric.reset_states()
         reconstruction_sharpness_loss_metric.reset_states()
+
+        # tf.keras.backend.clear_session()
 
 
 def generate(
@@ -704,6 +697,7 @@ def main(
     autoencoder_optimizer = tfa.optimizers.AdamW(
         weight_decay=1e-7, learning_rate=autoencoder_lr
     )
+    autoencoder.compile(optimizer=autoencoder_optimizer)
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")

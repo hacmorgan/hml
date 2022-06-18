@@ -2,8 +2,8 @@ from typing import Optional, Tuple
 
 import tensorflow as tf
 
-from hml.architectures.convolutional.decoders.fhd_decoder import Decoder
-from hml.architectures.convolutional.encoders.fhd_encoder import Encoder
+from hml.architectures.convolutional.decoders.fhd_decoder import Decoder, decoder
+from hml.architectures.convolutional.encoders.fhd_encoder import Encoder, encoder
 
 
 class VAE(tf.keras.models.Model):
@@ -26,8 +26,10 @@ class VAE(tf.keras.models.Model):
         super().__init__()
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
-        self.encoder_ = Encoder(latent_dim=self.latent_dim_, input_shape=input_shape)
-        self.decoder_ = Decoder(latent_dim=self.latent_dim_)
+        # self.encoder_ = Encoder(latent_dim=self.latent_dim_, input_shape=input_shape)
+        self.encoder_ = encoder(latent_dim=self.latent_dim_, input_shape=input_shape)
+        # self.decoder_ = Decoder(latent_dim=self.latent_dim_)
+        self.decoder_ = decoder(latent_dim=self.latent_dim_)
 
     def call(self, input_image: tf.Tensor) -> tf.Tensor:
         """
@@ -36,6 +38,16 @@ class VAE(tf.keras.models.Model):
         mean, logvar = self.encode(input_image)
         z = self.reparameterize(mean, logvar)
         return self.sample(z)
+
+    def compile(
+        self, optimizer: "Optimizer", loss_fn: str = "binary_crossentropy"
+    ) -> None:
+        """
+        Compile the model
+        """
+        super().compile()
+        self.optimizer = optimizer
+        self.loss_fn = loss_fn
 
     @tf.function
     def sample(self, eps: Optional[tf.Tensor] = None):

@@ -191,13 +191,9 @@ def cli_main(args: argparse.Namespace) -> int:
     Returns:
         Exit status
     """
-    main(
-        mode=args.mode,
-        model_dir=os.path.join("models", args.model_name),
-        dataset_path=args.dataset,
-        continue_from_checkpoint=args.checkpoint,
-        generator_input=args.generator_input,
-    )
+    ds = PixelArtDataset(dataset_path=args.dataset, crop_shape=(128, 128, 3))
+    for d in ds():
+        print(f"{d=}, {d.shape=}")
     return 0
 
 

@@ -1,7 +1,21 @@
-from typing import Tuple
+from typing import List, Tuple
 
 import tensorflow as tf
 from tensorflow.keras import layers
+
+
+def dense_block(
+    neurons: int, activation: str = "relu", batch_norm: bool = True
+) -> List[layers.Layer]:
+    """
+    Standard densely connected block
+    """
+    block = [layers.Dense(neurons)]
+    if batch_norm:
+        block.append(layers.BatchNormalization())
+    if activation == "relu":
+        block.append(layers.ReLU())
+    return block
 
 
 class DenseBlock(tf.keras.layers.Layer):
@@ -35,6 +49,22 @@ class DenseBlock(tf.keras.layers.Layer):
             h = self.activation(h)
         h = self.drop(h, training)
         return h
+
+
+def conv_2d_block(
+    filters: int, activation: str = "relu", batch_norm: bool = True
+) -> List[layers.Layer]:
+    """
+    Standard densely connected block
+    """
+    block = [
+        layers.Conv2D(filters, kernel_size=5, strides=2, padding="same"),
+    ]
+    if batch_norm:
+        block.append(layers.BatchNormalization())
+    if activation == "relu":
+        block.append(layers.ReLU())
+    return block
 
 
 class Conv2dBlock(tf.keras.layers.Layer):
@@ -84,6 +114,22 @@ class Conv2dBlock(tf.keras.layers.Layer):
             h = self.activation(h)
         h = self.drop(h, training)
         return h
+
+
+def deconv_2d_block(
+    filters: int, activation: str = "relu", batch_norm: bool = True
+) -> List[layers.Layer]:
+    """
+    Standard densely connected block
+    """
+    block = [
+        layers.Conv2DTranspose(filters, kernel_size=5, strides=2, padding="same"),
+    ]
+    if batch_norm:
+        block.append(layers.BatchNormalization())
+    if activation == "relu":
+        block.append(layers.ReLU())
+    return block
 
 
 class Deconv2dBlock(tf.keras.layers.Layer):

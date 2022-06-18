@@ -50,7 +50,9 @@ def load_image(image_path: str) -> Optional[np.ndarray]:
             image_np = np.array(image)
     except PIL.UnidentifiedImageError:
         print(f"Cannot open file: {image_path}, it will not be used for training")
-    if len(image_np.shape) != 3:
+    if len(image_np.shape) == 2:
+        image_np = np.array(image.convert("RGB"))
+    elif len(image_np.shape) != 3:
         print(f"Unusual image found: {image_path}, has shape {image_np.shape}")
         return None
     if image_np.shape[2] > 3:

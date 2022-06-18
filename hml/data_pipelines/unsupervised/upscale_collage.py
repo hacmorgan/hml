@@ -71,15 +71,13 @@ class UpscaleDataset:
         """
         source_images = self.full_dataset()
         for _ in range(self.num_examples_):
-            new_image = np.full(
-                shape=self.output_shape_, fill_value=-1, dtype=np.float32
-            )
+            new_image = np.full(shape=self.output_shape_, fill_value=-1.0)
             while (free_idx := next_free_pixel(new_image)) is not None:
                 try:
                     src_img = next(source_images)
                 except StopIteration:
                     source_images = self.full_dataset()
-                    continue
+                    src_img = next(source_images)
                 y, x = free_idx
                 h, w, _ = src_img.shape
                 new_image = insert_image(
@@ -97,7 +95,6 @@ class UpscaleDataset:
                 #         src_image=np.flipud(src_img),
                 #         location=(y + h, x),
                 #     )
-            print(new_image.shape)
             yield new_image
 
     def full_dataset(self) -> Iterator[np.ndarray]:
@@ -110,11 +107,14 @@ class UpscaleDataset:
         # If we have already loaded the dataset, shuffle it and return that
         if self.have_seen_full_dataset_:
             random.shuffle(self.dataset_)
-            return iter(self.dataset_)
+            for image in self.dataset_:
+                yield image
 
         # Otherwise load from disk
         for image_path in find_training_images(dataset_path=self.dataset_path_):
             image_np = load_image(image_path=image_path)
+            if image_np is None:
+                continue
             normalised = normalise(image_np)
             self.dataset_.append(normalised)
             yield normalised
@@ -136,3 +136,47 @@ def next_free_pixel(image: np.ndarray) -> Optional[Tuple[int, int]]:
     if len(ys) == 0:
         return None
     return ys[0], xs[0]
+
+
+def get_args() -> argparse.Namespace:
+    """
+    Define and parse command line arguments
+
+    Returns:
+        Argument values as argparse namespace
+    """
+    parser = argparse.ArgumentParser(
+        "Visualise training data",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "dataset",
+        type=str,
+        help="Path to dataset directory, containing training images",
+    )
+    return parser.parse_args()
+
+
+def cli_main(args: argparse.Namespace) -> int:
+    """
+    Main CLI routine
+
+    Args:
+        args: Command line arguments
+
+    Returns:
+        Exit status
+    """
+    ds = UpscaleDataset(
+        dataset_path=args.dataset, output_shape=(1080, 1920, 3), num_examples=2
+    )
+    print(*ds())
+    print(*ds())
+    print(len(list(ds.full_dataset())))
+    print(len((ds.dataset_)))
+    random.shuffle(ds.dataset_)
+    print(*iter(ds.dataset_))
+
+
+if __name__ == "__main__":
+    sys.exit(cli_main(get_args()))
