@@ -392,12 +392,12 @@ def train(
     train_images = (
         tf.data.Dataset.from_generator(
             UpscaleDataset(
-                dataset_path=dataset_path, output_shape=output_shape, num_examples=20480
+                dataset_path=dataset_path, output_shape=output_shape, num_examples=400
             ),
             output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
         )
         .batch(batch_size)
-        .cache("/home/hamish/tmp/tf-cache")
+        .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
     val_images = (
@@ -645,7 +645,7 @@ def main(
     model_dir: str,
     dataset_path: str,
     val_path: str,
-    epochs: int = 100,
+    epochs: int = 50,
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     buffer_size: int = 1000,
     batch_size: int = 1,
