@@ -1,0 +1,36 @@
+#! /usr/bin/env bash
+
+
+# Train script to run vae.py for 100 epochs at a time, resuming from the last checkpoint
+# each time
+#
+# Author:  Hamish Morgan
+# Date:    19/06/2022
+# License: BSD
+
+
+model_name="$1"
+[[ -n "$model_name" ]] || model_name="CollageVAE"
+
+checkpoint_dir=/mnt/storage/ml/models/$model_name/training_checkpoints
+
+
+function latest_checkpoint
+{
+    ls -t "$checkpoint_dir" |
+        grep "\.index" |
+        head -n1 |
+        sed 's#\(.*\)\.index#\1#'
+}
+
+
+i=0
+vae.py train \
+       --model-name "$model_name"
+while true; do
+    echo "Training the ${i}th time"
+    i=$(( i + 1 ))
+    vae.py train \
+           --model-name "$model_name" \
+           --checkpoint "$checkpoint_dir/$(latest_checkpoint)"
+done
