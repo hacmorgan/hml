@@ -120,7 +120,7 @@ class VAE(tf.keras.models.Model):
         images: tf.Tensor,
         beta: float = 1e0,
         gamma: float = 1e0,
-        delta: float = 0e0,
+        delta: float = 1e0,
         epsilon: float = 0e0,
     ) -> Tuple[float, float, float, float, tf.Tensor, tf.Tensor]:
         """
@@ -392,7 +392,7 @@ def train(
     train_images = (
         tf.data.Dataset.from_generator(
             UpscaleDataset(
-                dataset_path=dataset_path, output_shape=output_shape, num_examples=400
+                dataset_path=dataset_path, output_shape=output_shape, num_examples=200
             ),
             output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
         )
@@ -645,7 +645,7 @@ def main(
     model_dir: str,
     dataset_path: str,
     val_path: str,
-    epochs: int = 50,
+    epochs: int = 20,
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     buffer_size: int = 1000,
     batch_size: int = 1,
