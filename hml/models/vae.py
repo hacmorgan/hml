@@ -336,12 +336,13 @@ def train(
     checkpoint_prefix: str,
     dataset_path: str,
     val_path: str,
-    epochs: int = 20000,
+    epochs: int = 100,
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     batch_size: int = 128,
     latent_dim: int = 256,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
+    save_frequency: int = 10,
     debug: bool = False,
 ) -> None:
     """
@@ -370,6 +371,7 @@ def train(
             if discriminator loss is lower than this
         continue_from_checkpoint: Restore weights from checkpoint file if given, start
             from scratch otherwise.
+        save_frequency: How many epochs between model saves
         debug: Don't die if code not committed (for testing)
     """
     # Unless we are debugging, enforce that changes are committed
@@ -427,7 +429,7 @@ def train(
 
     # Set starting and end epoch according to whether we are continuing training
     if continue_from_checkpoint is not None:
-        epoch_start = 15 * int(
+        epoch_start = save_frequency * int(
             continue_from_checkpoint.strip()[continue_from_checkpoint.rfind("-") + 1 :]
         )
     else:
@@ -545,7 +547,7 @@ def train(
             tf.summary.image("generated images", generated, step=epoch)
 
         # Save the model every 2 epochs
-        if (epoch + 1) % 2 == 0:
+        if (epoch + 1) % save_frequency == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
             # Also close all pyplot figures. It is expensive to do this every epoch
@@ -651,7 +653,7 @@ def main(
     model_dir: str,
     dataset_path: str,
     val_path: str,
-    epochs: int = 2,
+    epochs: int = 100,
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     buffer_size: int = 1000,
     batch_size: int = 1,
@@ -687,10 +689,10 @@ def main(
     STEPS_PER_EPOCH = 128  # Randomly generated
 
     autoencoder_lr = WingRampLRS(
-        max_lr=3e-5,
+        max_lr=1e-4,
         min_lr=1e-6,
         start_decay_epoch=0,
-        stop_decay_epoch=500,
+        stop_decay_epoch=1000,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
 
@@ -836,7 +838,6 @@ def cli_main(args: argparse.Namespace) -> int:
         ),
         dataset_path=args.dataset,
         debug=args.debug,
-        epochs=20000,
         val_path=args.validation_dataset,
         continue_from_checkpoint=args.checkpoint,
         decoder_input=args.generator_input,

@@ -27,6 +27,7 @@ setup(
         "hml/models/pixel_art_vae.py",
         "hml/models/pixel_art_avae.py",
         "hml/models/sample_gan.py",
+        "hml/run_scripts/train-collage-vae",
     ],
     install_requires=[
         "GitPython",
