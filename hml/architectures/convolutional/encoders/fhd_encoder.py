@@ -46,42 +46,49 @@ class Encoder(tf.keras.layers.Layer):
             filters=128,
             kernel_size=5,
             strides=(2, 2),
+            regularise=0,
         )
         # Output shape: 576, 1024
         self.conv2 = Conv2dBlock(
             filters=128,
             kernel_size=5,
             strides=(2, 2),
+            regularise=0,
         )
         # Output shape: 288, 512
         self.conv3 = Conv2dBlock(
             filters=128,
             kernel_size=5,
             strides=(2, 2),
+            regularise=0,
         )
         # Output shape: 144, 256
         self.conv4 = Conv2dBlock(
             filters=128,
             kernel_size=5,
             strides=(2, 2),
+            regularise=0,
         )
         # Output shape: 72, 128
         self.conv5 = Conv2dBlock(
             filters=128,
             kernel_size=5,
             strides=(2, 2),
+            regularise=0,
         )
         # Output shape: 36, 64
         self.conv6 = Conv2dBlock(
             filters=128,
             kernel_size=5,
             strides=(2, 2),
+            regularise=0,
         )
         # Output shape: 18, 32
         self.conv7 = Conv2dBlock(
             filters=128,
             kernel_size=5,
             strides=(2, 2),
+            regularise=0,
         )
         # Output shape: 9, 16
         self.flattened = layers.Flatten()
@@ -108,7 +115,7 @@ class Encoder(tf.keras.layers.Layer):
         h5 = self.conv5(h4, training=training)
         h6 = self.conv6(h5, training=training)
         h7 = self.conv7(h6, training=training)
-        hf = self.flattened(h5, training=training)
+        hf = self.flattened(h7, training=training)
 
         # Generate distribution location and scale from dense layers
         loc = self.loc(hf, training=training)

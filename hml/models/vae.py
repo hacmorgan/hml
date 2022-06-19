@@ -25,8 +25,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import tensorflow_addons as tfa
 
-from hml.architectures.convolutional.decoders.fhd_decoder import Decoder
-from hml.architectures.convolutional.encoders.fhd_encoder import Encoder
+from hml.architectures.convolutional.autoencoders.vae import VariationalAutoEncoder
 
 from hml.data_pipelines.unsupervised.upscale_collage import UpscaleDataset
 
@@ -73,11 +72,12 @@ class VAE(tf.keras.models.Model):
         super().__init__()
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
-        self.encoder_ = Encoder(latent_dim=self.latent_dim_, input_shape=input_shape)
-        self.decoder_ = Decoder(latent_dim=self.latent_dim_)
+        self.net = VariationalAutoEncoder(
+            latent_dim=self.latent_dim_, input_shape=self.input_shape_
+        )
         self.structure = {
-            "encoder": self.encoder_,
-            "decoder": self.decoder_,
+            "encoder_": self.net.encoder_,
+            "decoder_": self.net.decoder_,
         }
 
     def call(
@@ -94,10 +94,7 @@ class VAE(tf.keras.models.Model):
             Posterior distribution (from encoder outputs)
             Reconstructed image
         """
-        posterior = self.encoder_(inputs=inputs, training=training)
-        z = posterior.sample()
-        reconstruction = self.sample(z)
-        return posterior, reconstruction
+        return self.net(inputs, training)
 
     def custom_compile(
         self,
@@ -118,22 +115,11 @@ class VAE(tf.keras.models.Model):
         self.loss_fn = loss_fn
         self.alpha_ = alpha
 
-    @tf.function
-    def sample(self, eps: Optional[tf.Tensor] = None, num_samples: int = 100):
-        """
-        Run a sample from an input distribution through the decoder to generate an image
-
-        Args:
-            eps: Sample from distribution
-        """
-        if eps is None:
-            eps = tf.random.normal(shape=(num_samples, self.latent_dim_))
-        return self.decoder_(eps)
-
     def compute_vae_loss(
         self,
         images: tf.Tensor,
         beta: float = 1e0,
+        gamma: float = 1e0,
         delta: float = 0e0,
         epsilon: float = 0e0,
     ) -> Tuple[float, float, float, float, tf.Tensor, tf.Tensor]:
@@ -147,6 +133,7 @@ class VAE(tf.keras.models.Model):
             images: Minibatch of training images
             labels: Minibatch of training labels
             beta: Contribution of KL divergence loss to total loss
+            gamma: Contribution of regularization loss to total loss
             delta: Contribution of generated image sharpness loss to total loss
             epsilon: Contribution of reconstructed image sharpness loss to total loss
 
@@ -158,11 +145,13 @@ class VAE(tf.keras.models.Model):
             Reconstructed images (used again to compute loss for training discriminator)
             Generated images (used again to compute loss for training discriminator)
         """
-        # Reconstruct a real image
+        # Reconstruct real image(s)
         posterior, reconstructions = self(images, training=True)
 
-        # Generate an image from noise input
-        generated = self.sample(num_samples=tf.shape(images)[0])
+        # Generate image(s) from noise input
+        generated = self.net.decoder_(
+            tf.random.normal(shape=(tf.shape(images)[0], self.latent_dim_))
+        )
 
         # Create unit gaussian prior
         prior = tfp.distributions.MultivariateNormalDiag(
@@ -227,7 +216,8 @@ class VAE(tf.keras.models.Model):
             latent_dim: Size of latent space
         """
         # Compute losses
-        with tf.GradientTape() as vae_tape:
+        with tf.GradientTape() as tape:
+            reg_loss = tf.reduce_sum(self.losses)
             (
                 vae_loss,
                 kl_loss,
@@ -235,15 +225,14 @@ class VAE(tf.keras.models.Model):
                 reconstruction_sharpness_loss,
                 reconstructed_images,
                 generated_images,
-            ) = self.compute_vae_loss(
-                images,
-            )
+            ) = self.compute_vae_loss(images)
+            loss = reg_loss + vae_loss
 
         # Compute gradients from losses
-        vae_gradients = vae_tape.gradient(vae_loss, self.trainable_variables)
+        gradients = tape.gradient(loss, self.net.trainable_variables)
 
         # Update weights
-        self.optimizer.apply_gradients(zip(vae_gradients, self.trainable_variables))
+        self.optimizer.apply_gradients(zip(gradients, self.net.trainable_variables))
 
         # Log losses to their respective metrics
         loss_metrics["vae_loss_metric"](vae_loss)
@@ -296,7 +285,7 @@ def generate_and_save_images(
     """
     Generate and save images
     """
-    predictions = autoencoder.sample(test_input)
+    predictions = autoencoder.net.decoder_(test_input)
     output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
     generate_save_image(predictions, output_path)
     return predictions
@@ -351,7 +340,7 @@ def train(
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     batch_size: int = 128,
     latent_dim: int = 256,
-    num_examples_to_generate: int = 16,
+    num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
     debug: bool = False,
 ) -> None:
@@ -605,9 +594,9 @@ def generate(
                 axis=0,
             )
         elif sample:
-            output = autoencoder.sample(latent_input)
+            output = autoencoder.net.decoder_(latent_input)
         else:
-            output = autoencoder.decoder_(latent_input, training=False)
+            output = autoencoder.net.decoder_(latent_input, training=False)
         generated_rgb_image = np.array((output[0, :, :, :] * 255.0)).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.close("all")
@@ -667,7 +656,7 @@ def main(
     buffer_size: int = 1000,
     batch_size: int = 1,
     latent_dim: int = 256,
-    num_examples_to_generate: int = 16,
+    num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
     save_generator_output: bool = False,
@@ -700,8 +689,8 @@ def main(
     autoencoder_lr = WingRampLRS(
         max_lr=3e-5,
         min_lr=1e-6,
-        start_decay_epoch=50,
-        stop_decay_epoch=1500,
+        start_decay_epoch=0,
+        stop_decay_epoch=500,
         steps_per_epoch=STEPS_PER_EPOCH,
     )
 
