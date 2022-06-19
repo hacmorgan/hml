@@ -2,29 +2,19 @@
 
 
 """
-Train a generative adversarial network to generate pixel art.
+Generic data loading utilities
 """
 
 
 __author__ = "Hamish Morgan"
 
 
-from typing import Callable, Iterator, List, Optional, Tuple
+from typing import Callable, Iterator, Optional, Tuple
 
-import argparse
-import datetime
 import os
-import random
-import sys
-import time
 
-import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
-
-# import PIL.ImageTk
-import tensorflow as tf
 
 
 def normalise(image: np.ndarray) -> np.ndarray:
@@ -104,7 +94,19 @@ def find_training_images(
 def insert_image(
     full_image: np.ndarray, src_image: np.ndarray, location: Tuple[int, int]
 ) -> np.ndarray:
-    """ """
+    """
+    Paste src_image into full_image at location
+
+    Handles cropping when src_image is bigger than the amount of room to paste it.
+
+    Args:
+        full_image: Full size image, prefilled with -1s
+        src_image: Image to be pasted into full-size canvas
+        location: Where to paste src_image (y, x)
+
+    Returns:
+        Full size image with source image pasted
+    """
     y, x = location
     h, w, _ = src_image.shape
     H, W, _ = full_image.shape

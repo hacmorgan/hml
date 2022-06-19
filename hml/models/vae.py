@@ -22,13 +22,17 @@ import numpy as np
 import PIL.Image
 
 import tensorflow as tf
+import tensorflow_probability as tfp
 import tensorflow_addons as tfa
-import tensorflow_io as tfio
 
-from hml.architectures.convolutional.autoencoders.vae import VAE
+from hml.architectures.convolutional.decoders.fhd_decoder import Decoder
+from hml.architectures.convolutional.encoders.fhd_encoder import Encoder
+
 from hml.data_pipelines.unsupervised.upscale_collage import UpscaleDataset
+
 from hml.util.git import modified_files_in_git_repo, write_commit_hash_to_model_dir
 from hml.util.learning_rate import WingRampLRS
+from hml.util.image import variance_of_laplacian
 
 
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
@@ -47,6 +51,207 @@ Total autoencoder loss:             {vae_loss:>6.4f}
 # This method returns a helper function to compute mean squared error loss
 mse = tf.keras.losses.MeanSquaredError()
 bce = tf.keras.losses.BinaryCrossentropy()
+
+
+class VAE(tf.keras.models.Model):
+    """
+    Autoencoder with architecture based on DCGAN paper
+
+    The adversarial part of this model is handled in hml.models.pixel_art_avae, so this
+    is just a plain VAE
+    """
+
+    def __init__(
+        self, latent_dim: int = 256, input_shape: Tuple[int, int, int] = (1152, 2048, 3)
+    ) -> "VAE":
+        """
+        Construct the autoencoder
+
+        Args:
+            latent_dim: Dimension of latent distribution (i.e. size of encoder input)
+        """
+        super().__init__()
+        self.latent_dim_ = latent_dim
+        self.input_shape_ = input_shape
+        self.encoder_ = Encoder(latent_dim=self.latent_dim_, input_shape=input_shape)
+        self.decoder_ = Decoder(latent_dim=self.latent_dim_)
+        self.structure = {
+            "encoder": self.encoder_,
+            "decoder": self.decoder_,
+        }
+
+    def call(
+        self, inputs: tf.Tensor, training: bool = False
+    ) -> Tuple[tfp.distributions.MultivariateNormalDiag, tf.Tensor]:
+        """
+        Run the model
+
+        Args:
+            inputs: Input images to be encoded
+            training: True if we are training, False otherwise
+
+        Returns:
+            Posterior distribution (from encoder outputs)
+            Reconstructed image
+        """
+        posterior = self.encoder_(inputs=inputs, training=training)
+        z = posterior.sample()
+        reconstruction = self.sample(z)
+        return posterior, reconstruction
+
+    def custom_compile(
+        self,
+        optimizer: tf.keras.optimizers.Optimizer,
+        loss_fn: str = "kl_mse",
+        alpha: float = 1.0,
+    ) -> None:
+        """
+        Compile the model
+
+        Args:
+            optimizer: Model optimizer
+            loss_fn: Name of loss function
+            alpha: Coefficient to balance divergence and likelihood losses
+        """
+        super().compile()
+        self.optimizer = optimizer
+        self.loss_fn = loss_fn
+        self.alpha_ = alpha
+
+    @tf.function
+    def sample(self, eps: Optional[tf.Tensor] = None, num_samples: int = 100):
+        """
+        Run a sample from an input distribution through the decoder to generate an image
+
+        Args:
+            eps: Sample from distribution
+        """
+        if eps is None:
+            eps = tf.random.normal(shape=(num_samples, self.latent_dim_))
+        return self.decoder_(eps)
+
+    def compute_vae_loss(
+        self,
+        images: tf.Tensor,
+        beta: float = 1e0,
+        delta: float = 0e0,
+        epsilon: float = 0e0,
+    ) -> Tuple[float, float, float, float, tf.Tensor, tf.Tensor]:
+        """
+        Compute loss for training VAE
+
+        Args:
+            vae: VAE model - should have encode(), decode(), reparameterize(), and sample()
+                methods
+            discriminator: The discriminator model
+            images: Minibatch of training images
+            labels: Minibatch of training labels
+            beta: Contribution of KL divergence loss to total loss
+            delta: Contribution of generated image sharpness loss to total loss
+            epsilon: Contribution of reconstructed image sharpness loss to total loss
+
+        Returns:
+            Total loss
+            VAE (KL divergence) component of loss
+            Image sharpness loss on generated images
+            Image sharpness loss on reconstructed images
+            Reconstructed images (used again to compute loss for training discriminator)
+            Generated images (used again to compute loss for training discriminator)
+        """
+        # Reconstruct a real image
+        posterior, reconstructions = self(images, training=True)
+
+        # Generate an image from noise input
+        generated = self.sample(num_samples=tf.shape(images)[0])
+
+        # Create unit gaussian prior
+        prior = tfp.distributions.MultivariateNormalDiag(
+            loc=[0.0] * self.latent_dim_, scale_diag=[1.0] * self.latent_dim_
+        )
+
+        # Compute KL divergence
+        divergence = tf.maximum(tfp.distributions.kl_divergence(posterior, prior), 0)
+
+        # Compute likelihood
+        likelihood = -tf.reduce_sum(
+            tf.keras.metrics.mean_squared_error(images, reconstructions)
+        )
+
+        # Compute ELBO loss
+        kl_loss = -tf.reduce_mean(likelihood - self.alpha_ * divergence)
+
+        # Sharpness loss on generated images
+        sharpness_loss_generated = -(
+            variance_of_laplacian(generated, ksize=3)
+            + variance_of_laplacian(generated, ksize=5)
+            + variance_of_laplacian(generated, ksize=7)
+        )
+
+        # Sharpness loss on reconstructed images
+        sharpness_loss_reconstructed = -(
+            variance_of_laplacian(reconstructions, ksize=3)
+            + variance_of_laplacian(reconstructions, ksize=5)
+            + variance_of_laplacian(reconstructions, ksize=7)
+        )
+
+        # Compute total loss and return
+        loss = (
+            beta * kl_loss
+            + delta * sharpness_loss_generated
+            + epsilon * sharpness_loss_reconstructed
+        )
+        return (
+            loss,
+            kl_loss,
+            sharpness_loss_generated,
+            sharpness_loss_reconstructed,
+            reconstructions,
+            generated,
+        )
+
+    @tf.function
+    def _train_step(
+        self,
+        images: tf.Tensor,
+        loss_metrics: Dict[str, "Metrics"],
+    ) -> None:
+        """
+        Perform one step of training
+
+        Args:
+            images: Training batch
+            autoencoder: Autoencoder model
+            autoencoder_optimizer: Optimizer for autoencoder model
+            loss_metrics: Dictionary of metrics to log
+            batch_size: Number of training examples in a batch
+            latent_dim: Size of latent space
+        """
+        # Compute losses
+        with tf.GradientTape() as vae_tape:
+            (
+                vae_loss,
+                kl_loss,
+                generation_sharpness_loss,
+                reconstruction_sharpness_loss,
+                reconstructed_images,
+                generated_images,
+            ) = self.compute_vae_loss(
+                images,
+            )
+
+        # Compute gradients from losses
+        vae_gradients = vae_tape.gradient(vae_loss, self.trainable_variables)
+
+        # Update weights
+        self.optimizer.apply_gradients(zip(vae_gradients, self.trainable_variables))
+
+        # Log losses to their respective metrics
+        loss_metrics["vae_loss_metric"](vae_loss)
+        loss_metrics["kl_loss_metric"](kl_loss)
+        loss_metrics["generation_sharpness_loss_metric"](generation_sharpness_loss)
+        loss_metrics["reconstruction_sharpness_loss_metric"](
+            reconstruction_sharpness_loss
+        )
 
 
 def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
@@ -93,9 +298,6 @@ def generate_and_save_images(
     """
     predictions = autoencoder.sample(test_input)
     output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
-    # threading.Thread(
-    #     target=generate_save_image, args=(predictions, output_path)
-    # ).start()
     generate_save_image(predictions, output_path)
     return predictions
 
@@ -109,168 +311,12 @@ def show_reproduction_quality(
     """
     Generate and save images
     """
-    reproductions = autoencoder.call(test_images)
-    print(f"{np.mean(reproductions)=}, {np.std(reproductions)=}")
-    print(f"{np.mean(test_images)=}, {np.std(test_images)=}")
+    _, reproductions = autoencoder.call(test_images)
     output_path = os.path.join(
         reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
     )
-    # threading.Thread(
-    #     target=reproduce_save_image, args=(test_images, reproductions, output_path)
-    # ).start()
     reproduce_save_image(test_images, reproductions, output_path)
     return reproductions
-
-
-def log_normal_pdf(sample, mean, logvar, raxis=1):
-    log2pi = tf.math.log(2.0 * np.pi)
-    return tf.reduce_sum(
-        -0.5 * ((sample - mean) ** 2.0 * tf.exp(-logvar) + logvar + log2pi), axis=raxis
-    )
-
-
-def variance_of_laplacian(images: tf.Tensor, ksize: int = 7) -> float:
-    """
-    Compute the variance of the Laplacian (2nd derivative) of an images, as a measure of
-    images sharpness.
-
-    This can be used to provide a loss contribution that maximizes images sharpness.
-
-    Args:
-        images: Mini-batch of images as 4D tensor
-        ksize: Size of Laplace operator kernel
-
-    Returns:
-        Variance of the laplacian of images.
-    """
-    gray_images = tf.image.rgb_to_grayscale(images)
-    laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=ksize)
-    return tf.math.reduce_variance(laplacian)
-
-
-def compute_vae_loss(
-    vae: tf.keras.models.Model,
-    images: tf.Tensor,
-    alpha: float = 1e0,
-    delta: float = 1e-3,
-    epsilon: float = 0e0,
-) -> Tuple[float, tf.Tensor, tf.Tensor, float, float, float]:
-    """
-    Compute loss for training VAE
-
-    Args:
-        vae: VAE model - should have encode(), decode(), reparameterize(), and sample()
-             methods
-        discriminator: The discriminator model
-        images: Minibatch of training images
-        labels: Minibatch of training labels
-        alpha: Contribution of KL divergence loss to total loss
-        beta: Contribution of discriminator loss on reconstructed images to total loss
-        gamma: Contribution of discriminator loss on generated images to total loss
-        delta: Contribution of generated image sharpness loss to total loss
-        epsilon: Contribution of reconstructed image sharpness loss to total loss
-        zeta: Contribution of smooth boundaries loss to total loss
-
-    Returns:
-        Total loss
-        VAE (KL divergence) component of loss
-        Image sharpness loss on generated images
-        Image sharpness loss on reconstructed images
-        Reconstructed images (used again to compute loss for training discriminator)
-        Generated images (used again to compute loss for training discriminator)
-    """
-    # Reconstruct a real image
-    mean, logvar = vae.encode(images)
-    z = vae.reparameterize(mean, logvar)
-    x_logit = vae.decode(z)
-    reconstructed = vae.sample(z)
-
-    # Generate an image from noise input
-    z_gen = tf.random.normal(shape=z.shape)
-    generated = vae.sample(z_gen)
-
-    # Compute KL divergence loss
-    cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=images)
-    logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
-    logpz = log_normal_pdf(z, 0.0, 0.0)
-    logqz_x = log_normal_pdf(z, mean, logvar)
-    kl_loss = -tf.reduce_mean(logpx_z + logpz - logqz_x)
-
-    # Sharpness loss on generated images
-    sharpness_loss_generated = -(
-        variance_of_laplacian(generated, ksize=3)
-        + variance_of_laplacian(generated, ksize=5)
-        + variance_of_laplacian(generated, ksize=7)
-    )
-
-    # Sharpness loss on reconstructed images
-    sharpness_loss_reconstructed = -(
-        variance_of_laplacian(reconstructed, ksize=3)
-        + variance_of_laplacian(reconstructed, ksize=5)
-        + variance_of_laplacian(reconstructed, ksize=7)
-    )
-
-    # Compute total loss and return
-    loss = (
-        alpha * kl_loss
-        + delta * sharpness_loss_generated
-        + epsilon * sharpness_loss_reconstructed
-    )
-    return (
-        loss,
-        kl_loss,
-        sharpness_loss_generated,
-        sharpness_loss_reconstructed,
-        reconstructed,
-        generated,
-    )
-
-
-@tf.function
-def train_step(
-    images: tf.Tensor,
-    autoencoder: tf.keras.models.Model,
-    autoencoder_optimizer: "Optimizer",
-    loss_metrics: Dict[str, "Metrics"],
-) -> None:
-    """
-    Perform one step of training
-
-    Args:
-        images: Training batch
-        autoencoder: Autoencoder model
-        autoencoder_optimizer: Optimizer for autoencoder model
-        loss_metrics: Dictionary of metrics to log
-        batch_size: Number of training examples in a batch
-        latent_dim: Size of latent space
-    """
-    # Compute losses
-    with tf.GradientTape() as vae_tape:
-        (
-            vae_loss,
-            kl_loss,
-            generation_sharpness_loss,
-            reconstruction_sharpness_loss,
-            reconstructed_images,
-            generated_images,
-        ) = compute_vae_loss(
-            autoencoder,
-            images,
-        )
-
-    # Compute gradients from losses
-    vae_gradients = vae_tape.gradient(vae_loss, autoencoder.trainable_variables)
-
-    # Update weights
-    autoencoder_optimizer.apply_gradients(
-        zip(vae_gradients, autoencoder.trainable_variables)
-    )
-
-    # Log losses to their respective metrics
-    loss_metrics["vae_loss_metric"](vae_loss)
-    loss_metrics["kl_loss_metric"](kl_loss)
-    loss_metrics["generation_sharpness_loss_metric"](generation_sharpness_loss)
-    loss_metrics["reconstruction_sharpness_loss_metric"](reconstruction_sharpness_loss)
 
 
 def compute_mse_losses(
@@ -286,8 +332,8 @@ def compute_mse_losses(
         train_images: Batch of training data
         val_images: Batch of validation data
     """
-    reproduced_train_images = autoencoder.call(train_images)
-    reproduced_val_images = autoencoder.call(val_images)
+    _, reproduced_train_images = autoencoder.call(train_images)
+    _, reproduced_val_images = autoencoder.call(val_images)
     train_loss = mse(train_images, reproduced_train_images)
     val_loss = mse(val_images, reproduced_val_images)
     return train_loss, val_loss
@@ -355,19 +401,24 @@ def train(
     train_images = (
         tf.data.Dataset.from_generator(
             UpscaleDataset(
-                dataset_path=dataset_path, output_shape=output_shape, num_examples=32
+                dataset_path=dataset_path, output_shape=output_shape, num_examples=128
             ),
             output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
         )
         .batch(batch_size)
+        .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
-    val_images = tf.data.Dataset.from_generator(
-        UpscaleDataset(
-            dataset_path=val_path, output_shape=output_shape, num_examples=32
-        ),
-        output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
-    ).batch(batch_size)
+    val_images = (
+        tf.data.Dataset.from_generator(
+            UpscaleDataset(
+                dataset_path=val_path, output_shape=output_shape, num_examples=1
+            ),
+            output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
+        )
+        .batch(batch_size)
+        .cache()
+    )
 
     # Save a few images for visualisation
     train_test_image_batch = next(iter(train_images))
@@ -419,10 +470,8 @@ def train(
         for step, image_batch in enumerate(train_images):
             # for step, image_batch in enumerate(train_ds()):
             # Perform training step
-            train_step(
+            autoencoder._train_step(
                 images=image_batch,
-                autoencoder=autoencoder,
-                autoencoder_optimizer=autoencoder_optimizer,
                 loss_metrics={
                     "vae_loss_metric": vae_loss_metric,
                     "kl_loss_metric": kl_loss_metric,
@@ -470,12 +519,6 @@ def train(
             val_test_image_batch,
         )
 
-        # Get sample of encoder output
-        z_mean, z_log_var = autoencoder.encode(train_test_image_batch)
-        encoder_output_train = autoencoder.reparameterize(z_mean, z_log_var)
-        z_mean, z_log_var = autoencoder.encode(val_test_image_batch)
-        encoder_output_val = autoencoder.reparameterize(z_mean, z_log_var)
-
         # Write to logs
         with summary_writer.as_default():
 
@@ -498,37 +541,6 @@ def train(
                 "VAE learning rate",
                 # autoencoder_optimizer.learning_rate,
                 autoencoder_optimizer.learning_rate(epoch * step),
-                step=epoch,
-            )
-
-            # Encoder outputs
-            tf.summary.histogram(
-                "encoder output train", encoder_output_train, step=epoch
-            )
-            tf.summary.histogram("encoder output val", encoder_output_val, step=epoch)
-            tf.summary.histogram(
-                "random normal noise",
-                tf.random.normal(shape=[num_examples_to_generate, latent_dim]),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "encoder output train: mean",
-                np.mean(encoder_output_train.numpy()),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "encoder output train: stddev",
-                np.std(encoder_output_train.numpy()),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "encoder output val: mean",
-                np.mean(encoder_output_val.numpy()),
-                step=epoch,
-            )
-            tf.summary.scalar(
-                "encoder output val: stddev",
-                np.std(encoder_output_val.numpy()),
                 step=epoch,
             )
 
@@ -686,8 +698,8 @@ def main(
     STEPS_PER_EPOCH = 128  # Randomly generated
 
     autoencoder_lr = WingRampLRS(
-        max_lr=1e-4,
-        min_lr=1e-5,
+        max_lr=3e-5,
+        min_lr=1e-6,
         start_decay_epoch=50,
         stop_decay_epoch=1500,
         steps_per_epoch=STEPS_PER_EPOCH,
@@ -697,7 +709,7 @@ def main(
     autoencoder_optimizer = tfa.optimizers.AdamW(
         weight_decay=1e-7, learning_rate=autoencoder_lr
     )
-    # autoencoder.compile(optimizer=autoencoder_optimizer)
+    autoencoder.custom_compile(optimizer=autoencoder_optimizer)
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
@@ -835,6 +847,7 @@ def cli_main(args: argparse.Namespace) -> int:
         ),
         dataset_path=args.dataset,
         debug=args.debug,
+        epochs=20000,
         val_path=args.validation_dataset,
         continue_from_checkpoint=args.checkpoint,
         decoder_input=args.generator_input,

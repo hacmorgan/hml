@@ -55,7 +55,7 @@ def conv_2d_block(
     filters: int, activation: str = "relu", batch_norm: bool = True
 ) -> List[layers.Layer]:
     """
-    Standard densely connected block
+    Standard convolutional block
     """
     block = [
         layers.Conv2D(filters, kernel_size=5, strides=2, padding="same"),
