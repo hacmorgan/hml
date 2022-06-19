@@ -392,12 +392,12 @@ def train(
     train_images = (
         tf.data.Dataset.from_generator(
             UpscaleDataset(
-                dataset_path=dataset_path, output_shape=output_shape, num_examples=128
+                dataset_path=dataset_path, output_shape=output_shape, num_examples=20480
             ),
             output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
         )
         .batch(batch_size)
-        .cache()
+        .cache("/home/hamish/tmp/tf-cache")
         .prefetch(tf.data.AUTOTUNE)
     )
     val_images = (
@@ -587,18 +587,10 @@ def generate(
         input_decoded = tf.image.decode_image(input_raw)
         latent_input = tf.reshape(input_decoded, [200, latent_dim])
     else:
-        latent_input = tf.random.normal([200, latent_dim])
+        latent_input = tf.random.normal([1, latent_dim])
     i = 0
     while True:
-        if flood_shape is not None:
-            output = tf.expand_dims(
-                flood_generate(autoencoder, seed=latent_input, shape=flood_shape),
-                axis=0,
-            )
-        elif sample:
-            output = autoencoder.net.decoder_(latent_input)
-        else:
-            output = autoencoder.net.decoder_(latent_input, training=False)
+        output = autoencoder.net.decoder_(latent_input)
         generated_rgb_image = np.array((output[0, :, :, :] * 255.0)).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
         plt.close("all")
@@ -611,7 +603,7 @@ def generate(
             i += 1
         else:
             plt.show()
-        latent_input = tf.random.normal([200, latent_dim])
+        latent_input = tf.random.normal([1, latent_dim])
 
 
 def regenerate_images(slider_value: Optional[float] = None) -> None:
@@ -734,7 +726,6 @@ def main(
         generate(
             autoencoder=autoencoder,
             decoder_input=decoder_input,
-            flood_shape=flood_generate_shape,
             latent_dim=latent_dim,
             save_output=save_generator_output,
             sample=sample,
