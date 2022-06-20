@@ -71,6 +71,7 @@ function iso_date
 
 if [[ -n "$local" ]]; then
     echo "Generating image..." >&2
+    checkout_and_reinstall
     generate_one_image
 else
     ssh $GEORGE "source $HOME/src/hml/hml-env/bin/activate && generate-wallpaper local"
