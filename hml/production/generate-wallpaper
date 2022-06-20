@@ -8,6 +8,10 @@
 # License: BSD
 
 
+set -o pipefail
+set -o errexit
+
+
 HML="$HOME/src/hml"
 MODEL_DIR=/mnt/storage/ml/production/generate_wallpaper/for_dad
 CHECKPOINT_DIR="$MODEL_DIR/training_checkpoints"
@@ -67,7 +71,7 @@ if [[ -n "$local" ]]; then
     echo "Generating image..." >&2
     generate_one_image
 else
-    ssh $GEORGE "source $HOME/src/hml/hml-env/bin/activate && bash generate-wallpaper local"
+    ssh $GEORGE "source $HOME/src/hml/hml-env/bin/activate && generate-wallpaper local"
     save_path="$HOME/Desktop/new-wallpaper-$(iso_date).png"
     scp -v $GEORGE/tmp/generated_0.png "$save_path"
 fi
