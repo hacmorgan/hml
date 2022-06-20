@@ -1,0 +1,73 @@
+#! /usr/bin/env bash
+
+
+# Generate a wallpaper using CNN
+#
+# Author:  Hamish Morgan
+# Date:    19/06/2022
+# License: BSD
+
+
+HML="$HOME/src/hml"
+MODEL_DIR=/mnt/storage/ml/production/generate_wallpaper/for_dad
+CHECKPOINT_DIR="$MODEL_DIR/training_checkpoints"
+GEORGE=hamish@thinkingaboudis.zapto.org
+
+
+local="$1"
+
+
+function latest_checkpoint
+{
+    ls -t "$CHECKPOINT_DIR" |
+        grep "\.index" |
+        head -n1 |
+        sed 's#\(.*\)\.index#\1#'
+}
+
+
+function checkout_and_reinstall
+{
+    (
+        cd "$HML" || exit 1
+        git pull
+        git checkout "$(cat "$MODEL_DIR/commit-hash")"
+        python3 -m pip install --upgrade --editable .
+    )
+}
+
+
+function generate_one_image
+{
+    (
+        cd /tmp || exit 1
+        vae.py generate \
+            --num-generations 1 \
+            --checkpoint "$CHECKPOINT_DIR/$(latest_checkpoint)"
+    )
+}
+
+
+function iso_date
+{
+    date '+%Y%m%dT%H%M%S'
+}
+
+
+# function macos_set_wallpaper
+# {
+#     local save_path="$1"
+#     sqlite3 "$HOME/Library/Application Support/Dock/desktoppicture.db" \
+#             "update data set value = '$save_path'" &&
+#         killall Dock
+# }
+
+
+if [[ -n "$local" ]]; then
+    echo "Generating image..." >&2
+    generate_one_image
+else
+    ssh $GEORGE "bash generate-wallpaper local"
+    save_path="$HOME/Desktop/new-wallpaper-$(iso_date).png"
+    scp -v $GEORGE/tmp/generated_0.png "$save_path"
+fi

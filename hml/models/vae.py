@@ -13,10 +13,12 @@ from typing import Dict, Optional, Tuple
 
 import argparse
 import datetime
+import io
 import os
 import sys
 import time
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
@@ -566,6 +568,7 @@ def generate(
     decoder_input: Optional[str] = None,
     latent_dim: int = 50,
     save_output: bool = False,
+    num_generations: Optional[int] = None,
     sample: bool = True,
     flood_shape: Optional[Tuple[int, int]] = None,
 ) -> None:
@@ -592,16 +595,19 @@ def generate(
         output = autoencoder.net.decoder_(latent_input)
         generated_rgb_image = np.array((output[0, :, :, :] * 255.0)).astype(np.uint8)
         # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
-        plt.close("all")
-        plt.imshow(generated_rgb_image)
-        plt.axis("off")
         if save_output:
-            plt.savefig(f"generated_{i}.png")
+            save_name = f"generated_{i}.png"
+            cv2.imwrite(save_name, cv2.cvtColor(generated_rgb_image, cv2.COLOR_BGR2RGB))
             print(f"image generated to: generated_{i}.png")
-            input("press enter to generate another image")
             i += 1
         else:
+            plt.close("all")
+            plt.imshow(generated_rgb_image)
+            plt.axis("off")
             plt.show()
+        if num_generations is not None and i > num_generations:
+            break
+        input("press enter to generate another image")
         latent_input = tf.random.normal([1, latent_dim])
 
 
@@ -653,6 +659,7 @@ def main(
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,
     save_generator_output: bool = False,
+    num_generations: Optional[int] = None,
     debug: bool = False,
     sample: bool = True,
 ) -> None:
@@ -731,6 +738,7 @@ def main(
             decoder_input=decoder_input,
             latent_dim=latent_dim,
             save_output=save_generator_output,
+            num_generations=num_generations,
             sample=sample,
         )
     elif mode == "view-latent-space":
@@ -797,6 +805,11 @@ def get_args() -> argparse.Namespace:
         help="Directly feed noise to decoder instead of running sample",
     )
     parser.add_argument(
+        "--num-generations",
+        type=int,
+        help="Number of images to generate (only in generate mode)",
+    )
+    parser.add_argument(
         "--save-output",
         "-s",
         action="store_true",
@@ -837,6 +850,7 @@ def cli_main(args: argparse.Namespace) -> int:
         decoder_input=args.generator_input,
         save_generator_output=args.save_output,
         sample=not args.no_sample,
+        num_generations=args.num_generations,
     )
     return 0
 
