@@ -119,8 +119,7 @@ class VAE(tf.keras.models.Model):
         self,
         images: tf.Tensor,
         beta: float = 1e0,
-        gamma: float = 1e0,
-        delta: float = 1e0,
+        delta: float = 1e-3,
         epsilon: float = 0e0,
     ) -> Tuple[float, float, float, float, tf.Tensor, tf.Tensor]:
         """
@@ -645,7 +644,7 @@ def main(
     model_dir: str,
     dataset_path: str,
     val_path: str,
-    epochs: int = 20,
+    epochs: int = 100,
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     buffer_size: int = 1000,
     batch_size: int = 1,
@@ -680,18 +679,22 @@ def main(
     """
     STEPS_PER_EPOCH = 128  # Randomly generated
 
-    autoencoder_lr = WingRampLRS(
-        max_lr=1e-4,
-        min_lr=1e-6,
-        start_decay_epoch=0,
-        stop_decay_epoch=1000,
-        steps_per_epoch=STEPS_PER_EPOCH,
+    # autoencoder_lr = WingRampLRS(
+    #     max_lr=1e-4,
+    #     min_lr=1e-6,
+    #     start_decay_epoch=0,
+    #     stop_decay_epoch=1000,
+    #     steps_per_epoch=STEPS_PER_EPOCH,
+    # )
+    autoencoder_lr = tf.keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate=1e-4, decay_steps=STEPS_PER_EPOCH * 1000, decay_rate=0.9
     )
 
     autoencoder = VAE(latent_dim=latent_dim, input_shape=output_shape)
-    autoencoder_optimizer = tfa.optimizers.AdamW(
-        weight_decay=1e-7, learning_rate=autoencoder_lr
-    )
+    # autoencoder_optimizer = tfa.optimizers.AdamW(
+    #     weight_decay=1e-7, learning_rate=autoencoder_lr
+    # )
+    autoencoder_optimizer = tf.keras.optimizers.Adam(learning_rate=autoencoder_lr)
     autoencoder.custom_compile(optimizer=autoencoder_optimizer)
 
     checkpoint_dir = os.path.join(model_dir, "training_checkpoints")

@@ -12,6 +12,7 @@ __author__ = "Hamish Morgan"
 from typing import Callable, Iterator, Optional, Tuple
 
 import os
+import random
 
 import numpy as np
 import PIL.Image
@@ -50,7 +51,7 @@ def load_image(image_path: str) -> Optional[np.ndarray]:
     return image_np
 
 
-def walk_using_scandir(path: str) -> Iterator[os.DirEntry]:
+def walk_using_scandir(path: str, shuffle: bool = True) -> Iterator[os.DirEntry]:
     """
     Find all files under a top-level path using os.scandir recursively
 
@@ -59,11 +60,17 @@ def walk_using_scandir(path: str) -> Iterator[os.DirEntry]:
 
     Args:
         path: Top level path to walk
+        shuffle: Shuffle directory elements before recursing/yielding if True, keep in
+            order of discovery otherwise
 
     Yields:
         Path to every file under path in the filesystem
     """
-    for entry in os.scandir(path):
+    dir_entries = os.scandir(path)
+    if shuffle:
+        dir_entries = list(dir_entries)
+        random.shuffle(dir_entries)
+    for entry in dir_entries:
         if entry.is_dir():
             yield from walk_using_scandir(entry.path)
         else:

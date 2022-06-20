@@ -20,7 +20,7 @@ def dense_block(
 
 class DenseBlock(tf.keras.layers.Layer):
     def __init__(
-        self, units, regularise=0.01, drop_prob=0.2, activation=tf.nn.relu, useBN=False
+        self, units, regularise=0.01, drop_prob=0.2, activation=tf.nn.relu, useBN=True
     ):
         super(DenseBlock, self).__init__()
         self.units = units
@@ -77,7 +77,7 @@ class Conv2dBlock(tf.keras.layers.Layer):
         regularise=0.01,
         drop_prob=0.2,
         activation=tf.nn.relu,
-        useBN=False,
+        useBN=True,
     ):
         super().__init__()
         self.filters = filters
@@ -142,7 +142,7 @@ class Deconv2dBlock(tf.keras.layers.Layer):
         regularise=0.01,
         drop_prob=0.2,
         activation=tf.nn.relu,
-        useBN=False,
+        useBN=True,
     ):
         super().__init__()
         self.filters = filters

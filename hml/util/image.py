@@ -14,7 +14,7 @@ import tensorflow as tf
 import tensorflow_io as tfio
 
 
-def variance_of_laplacian(images: tf.Tensor, ksize: int = 7) -> float:
+def variance_of_laplacian(images: tf.Tensor, ksize: int = 7, log: bool = True) -> float:
     """
     Compute the variance of the Laplacian (2nd derivative) of an images, as a measure of
     images sharpness.
@@ -24,10 +24,14 @@ def variance_of_laplacian(images: tf.Tensor, ksize: int = 7) -> float:
     Args:
         images: Mini-batch of images as 4D tensor
         ksize: Size of Laplace operator kernel
+        log: Return log(variance) if True, just variance otherwise
 
     Returns:
         Variance of the laplacian of images.
     """
     gray_images = tf.image.rgb_to_grayscale(images)
     laplacian = tfio.experimental.filter.laplacian(gray_images, ksize=ksize)
-    return tf.math.reduce_variance(laplacian)
+    variance = tf.math.reduce_variance(laplacian)
+    if log:
+        return tf.math.log(variance)
+    return variance

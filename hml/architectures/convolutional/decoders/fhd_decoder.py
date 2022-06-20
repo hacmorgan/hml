@@ -90,6 +90,7 @@ class Decoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             activation=tf.nn.sigmoid,
+            # activation=None,
             drop_prob=0,
             regularise=0,
             useBN=False,
