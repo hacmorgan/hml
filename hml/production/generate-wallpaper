@@ -67,7 +67,7 @@ if [[ -n "$local" ]]; then
     echo "Generating image..." >&2
     generate_one_image
 else
-    ssh $GEORGE "bash generate-wallpaper local"
+    ssh $GEORGE "source $HOME/src/hml/hml-env/bin/activate && bash generate-wallpaper local"
     save_path="$HOME/Desktop/new-wallpaper-$(iso_date).png"
     scp -v $GEORGE/tmp/generated_0.png "$save_path"
 fi
