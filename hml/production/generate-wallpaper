@@ -46,8 +46,9 @@ function generate_one_image
     (
         cd /tmp || exit 1
         vae.py generate \
-            --num-generations 1 \
-            --checkpoint "$CHECKPOINT_DIR/$(latest_checkpoint)"
+               --num-generations 1 \
+               --save-output \
+               --checkpoint "$CHECKPOINT_DIR/$(latest_checkpoint)"
     )
 }
 
