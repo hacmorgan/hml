@@ -121,7 +121,7 @@ class VAE(tf.keras.models.Model):
         self,
         images: tf.Tensor,
         beta: float = 1e0,
-        delta: float = 1e-4,
+        delta: float = 1e-2,
         epsilon: float = 0e0,
     ) -> Tuple[float, float, float, float]:
         """
