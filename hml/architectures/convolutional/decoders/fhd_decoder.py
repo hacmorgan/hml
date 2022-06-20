@@ -41,6 +41,7 @@ class Decoder(tf.keras.layers.Layer):
         self.dense = DenseBlock(
             units=(9 * 16 * 128),
             regularise=0,
+            useBN=False,
         )
         self.reshape = layers.Reshape((9, 16, 128))
         self.conv1 = Deconv2dBlock(
@@ -48,6 +49,7 @@ class Decoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
+            useBN=False,
         )
         # Output shape: 18, 32
         self.conv2 = Deconv2dBlock(
@@ -55,6 +57,7 @@ class Decoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
+            useBN=False,
         )
         # Output shape: 36, 64
         self.conv3 = Deconv2dBlock(
@@ -62,6 +65,7 @@ class Decoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
+            useBN=False,
         )
         # Output shape: 72, 128
         self.conv4 = Deconv2dBlock(
@@ -69,6 +73,7 @@ class Decoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
+            useBN=False,
         )
         # Output shape: 144, 256
         self.conv5 = Deconv2dBlock(
@@ -76,6 +81,7 @@ class Decoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
+            useBN=False,
         )
         # Output shape: 288, 512
         self.conv6 = Deconv2dBlock(
@@ -83,14 +89,15 @@ class Decoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
+            useBN=False,
         )
         # Output shape: 576, 1024
         self.conv7 = Deconv2dBlock(
             filters=3,
             kernel_size=5,
             strides=(2, 2),
-            activation=tf.nn.sigmoid,
-            # activation=None,
+            # activation=tf.nn.sigmoid,
+            activation=None,
             drop_prob=0,
             regularise=0,
             useBN=False,

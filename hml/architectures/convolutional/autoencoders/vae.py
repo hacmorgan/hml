@@ -7,7 +7,7 @@ License: BSD
 """
 
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 import tensorflow as tf
 import tensorflow_probability as tfp

@@ -44,7 +44,7 @@ class UpscaleDataset:
         dataset_path: str,
         output_shape: Tuple[int, int],
         num_examples: int,
-        flip_probability: float = 0.3,
+        flip_probability: float = 0.5,
     ) -> "UpscaleDataset":
         """
         Construct the data generator.
@@ -83,18 +83,8 @@ class UpscaleDataset:
                 new_image = insert_image(
                     full_image=new_image, src_image=src_img, location=(y, x)
                 )
-                # if should_flip := random.random() < self.flip_prob_ / 2:
-                #     new_image = insert_image(
-                #         full_image=new_image,
-                #         src_image=np.fliplr(src_img),
-                #         location=(y, x + w),
-                #     )
-                # elif should_flip < self.flip_prob_:
-                #     new_image = insert_image(
-                #         full_image=new_image,
-                #         src_image=np.flipud(src_img),
-                #         location=(y + h, x),
-                #     )
+            if random.random() < self.flip_prob_:
+                new_image = np.fliplr(new_image)
             yield new_image
 
     def full_dataset(self) -> Iterator[np.ndarray]:

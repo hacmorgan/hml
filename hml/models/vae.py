@@ -123,7 +123,7 @@ class VAE(tf.keras.models.Model):
         beta: float = 1e0,
         delta: float = 1e-4,
         epsilon: float = 0e0,
-    ) -> Tuple[float, float, float, float, tf.Tensor, tf.Tensor]:
+    ) -> Tuple[float, float, float, float]:
         """
         Compute loss for training VAE
 
@@ -143,8 +143,6 @@ class VAE(tf.keras.models.Model):
             VAE (KL divergence) component of loss
             Image sharpness loss on generated images
             Image sharpness loss on reconstructed images
-            Reconstructed images (used again to compute loss for training discriminator)
-            Generated images (used again to compute loss for training discriminator)
         """
         # Reconstruct real image(s)
         posterior, reconstructions = self(images, training=True)
@@ -176,6 +174,7 @@ class VAE(tf.keras.models.Model):
             + variance_of_laplacian(generated, ksize=5)
             + variance_of_laplacian(generated, ksize=7)
         )
+        # sharpness_loss_generated = 0
 
         # Sharpness loss on reconstructed images
         sharpness_loss_reconstructed = -(
@@ -183,6 +182,7 @@ class VAE(tf.keras.models.Model):
             + variance_of_laplacian(reconstructions, ksize=5)
             + variance_of_laplacian(reconstructions, ksize=7)
         )
+        # sharpness_loss_reconstructed = 0
 
         # Compute total loss and return
         loss = (
@@ -195,8 +195,6 @@ class VAE(tf.keras.models.Model):
             kl_loss,
             sharpness_loss_generated,
             sharpness_loss_reconstructed,
-            reconstructions,
-            generated,
         )
 
     @tf.function
@@ -224,8 +222,6 @@ class VAE(tf.keras.models.Model):
                 kl_loss,
                 generation_sharpness_loss,
                 reconstruction_sharpness_loss,
-                reconstructed_images,
-                generated_images,
             ) = self.compute_vae_loss(images)
             loss = reg_loss + vae_loss
 
@@ -243,70 +239,36 @@ class VAE(tf.keras.models.Model):
             reconstruction_sharpness_loss
         )
 
+    def generate_and_save_images(
+        self,
+        epoch: int,
+        test_input: tf.Tensor,
+        progress_dir: str,
+    ) -> tf.Tensor:
+        """
+        Generate and save images
+        """
+        predictions = self.net.decoder_(test_input)
+        output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
+        cv2.imwrite(output_path, cv2.cvtColor(predictions.numpy(), cv2.COLOR_BGR2RGB))
+        return predictions
 
-def generate_save_image(predictions: tf.Tensor, output_path: str) -> None:
-    """
-    Actually generate the image and save it.
-
-    This is done in a separate thread to avoid waiting for io.
-    """
-    for i in range(predictions.shape[0]):
-        plt.subplot(4, 4, i + 1)
-        generated_rgb_image = np.array((predictions[i, :, :, :] * 255.0)).astype(
-            np.uint8
+    def show_reproduction_quality(
+        self,
+        epoch: int,
+        test_images: tf.Tensor,
+        reproductions_dir: str,
+    ) -> tf.Tensor:
+        """
+        Generate and save images
+        """
+        _, reproductions = self(test_images)
+        stacked = tf.concat([test_images, reproductions], axis=1)
+        output_path = os.path.join(
+            reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
         )
-        plt.imshow(generated_rgb_image)
-        plt.axis("off")
-    plt.savefig(output_path, dpi=250)
-
-
-def reproduce_save_image(
-    test_images: tf.Tensor, reproductions: tf.Tensor, output_path: str
-) -> None:
-    """
-    Regenerate some images and save to file.
-
-    This is done in a separate thread to avoid waiting for io.
-    """
-    for i, (test_image, reproduction) in enumerate(zip(test_images, reproductions)):
-        plt.subplot(2, 4, i + 1)
-        stacked = tf.concat([test_image, reproduction], axis=0)
-        rgb_image = np.array((stacked * 255.0)).astype(np.uint8)
-        plt.imshow(rgb_image)
-        plt.axis("off")
-    plt.savefig(output_path, dpi=250)
-
-
-def generate_and_save_images(
-    autoencoder: tf.keras.Sequential,
-    epoch: int,
-    test_input: tf.Tensor,
-    progress_dir: str,
-) -> None:
-    """
-    Generate and save images
-    """
-    predictions = autoencoder.net.decoder_(test_input)
-    output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
-    generate_save_image(predictions, output_path)
-    return predictions
-
-
-def show_reproduction_quality(
-    autoencoder: tf.keras.models.Model,
-    epoch: int,
-    test_images: tf.Tensor,
-    reproductions_dir: str,
-) -> tf.Tensor:
-    """
-    Generate and save images
-    """
-    _, reproductions = autoencoder.call(test_images)
-    output_path = os.path.join(
-        reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
-    )
-    reproduce_save_image(test_images, reproductions, output_path)
-    return reproductions
+        cv2.imwrite(output_path, cv2.cvtColor(stacked.numpy(), cv2.COLOR_BGR2RGB))
+        return stacked
 
 
 def compute_mse_losses(
@@ -419,7 +381,12 @@ def train(
     val_test_images = val_test_image_batch[:8, ...]
 
     # Make progress dir and reproductions dir for outputs
-    os.makedirs(progress_dir := os.path.join(model_dir, "progress"), exist_ok=True)
+    os.makedirs(
+        generated_same_dir := os.path.join(model_dir, "generated_same"), exist_ok=True
+    )
+    os.makedirs(
+        generated_new_dir := os.path.join(model_dir, "generated_new"), exist_ok=True
+    )
     os.makedirs(
         reproductions_dir := os.path.join(model_dir, "reproductions"), exist_ok=True
     )
@@ -487,18 +454,23 @@ def train(
                     )
                 )
 
-        # Produce demo output every epoch the generator trains
-        generated = generate_and_save_images(autoencoder, epoch + 1, seed, progress_dir)
+        # Produce demo output from the same seed and form a new seed each time
+        generated_same = autoencoder.generate_and_save_images(
+            epoch + 1, seed, generated_same_dir
+        )
+        generated_new = autoencoder.generate_and_save_images(
+            epoch + 1,
+            tf.random.normal(shape=[num_examples_to_generate, latent_dim]),
+            generated_new_dir,
+        )
 
         # Show some examples of how the model reconstructs its inputs.
-        train_reconstructed = show_reproduction_quality(
-            autoencoder,
+        train_reconstructed = autoencoder.show_reproduction_quality(
             epoch + 1,
             train_test_images,
             reproductions_dir,
         )
-        val_reconstructed = show_reproduction_quality(
-            autoencoder,
+        val_reconstructed = autoencoder.show_reproduction_quality(
             epoch + 1,
             val_test_images,
             val_reproductions_dir,
@@ -545,7 +517,8 @@ def train(
                 "reconstructed train images", train_reconstructed, step=epoch
             )
             tf.summary.image("reconstructed val images", val_reconstructed, step=epoch)
-            tf.summary.image("generated images", generated, step=epoch)
+            tf.summary.image("generated images (same seed)", generated_same, step=epoch)
+            tf.summary.image("generated images (new seed)", generated_new, step=epoch)
 
         # Save the model every 2 epochs
         if (epoch + 1) % save_frequency == 0:
