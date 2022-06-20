@@ -605,7 +605,7 @@ def generate(
             plt.imshow(generated_rgb_image)
             plt.axis("off")
             plt.show()
-        if num_generations is not None and i > num_generations:
+        if num_generations is not None and i >= num_generations:
             break
         input("press enter to generate another image")
         latent_input = tf.random.normal([1, latent_dim])
