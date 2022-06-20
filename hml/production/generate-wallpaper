@@ -10,6 +10,7 @@
 
 set -o pipefail
 set -o errexit
+set -o xtrace
 
 
 HML="$HOME/src/hml"
