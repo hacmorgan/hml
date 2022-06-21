@@ -121,7 +121,7 @@ class VAE(tf.keras.models.Model):
         self,
         images: tf.Tensor,
         beta: float = 1e0,
-        delta: float = 1e0,
+        delta: float = 1e1,
         epsilon: float = 0e0,
     ) -> Tuple[float, float, float, float]:
         """
@@ -627,7 +627,7 @@ def main(
     output_shape: Tuple[int, int, int] = (1152, 2048, 3),
     buffer_size: int = 1000,
     batch_size: int = 1,
-    latent_dim: int = 256,
+    latent_dim: int = 512,
     num_examples_to_generate: int = 1,
     continue_from_checkpoint: Optional[str] = None,
     decoder_input: Optional[str] = None,

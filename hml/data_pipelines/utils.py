@@ -127,3 +127,31 @@ def insert_image(
         src_image = src_image[:, :w, :]
     full_image[y : y + h, x : x + w, :] = src_image
     return full_image
+
+
+def crop_randomly(
+    image: np.ndarray, min_crop_ratio: float = 0.3, max_crop_ratio: float = 1.0
+) -> np.ndarray:
+    """
+    Crop an subset of an image randomly
+
+    Args:
+        image: Full input image
+        min_crop_ratio: Minimum side length of cropped region as ratio of full image
+            side length
+        min_crop_ratio: Minimum side length of cropped region as ratio of full image
+            side length
+
+    Returns:
+        Cropped subsection of image
+    """
+    image_height, image_width, _ = image.shape
+    crop_width = random.randint(
+        int(min_crop_ratio * image_width), int(max_crop_ratio * image_width)
+    )
+    crop_height = random.randint(
+        int(min_crop_ratio * image_height), int(max_crop_ratio * image_height)
+    )
+    crop_x = random.randint(0, image_width - crop_width)
+    crop_y = random.randint(0, image_height - crop_height)
+    return image[crop_y : crop_y + crop_height, crop_x : crop_x + crop_width, :]

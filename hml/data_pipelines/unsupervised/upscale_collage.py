@@ -27,9 +27,10 @@ import PIL.Image
 import tensorflow as tf
 
 from hml.data_pipelines.utils import (
-    load_image,
-    insert_image,
+    crop_randomly,
     find_training_images,
+    insert_image,
+    load_image,
     normalise,
 )
 
@@ -45,6 +46,7 @@ class UpscaleDataset:
         output_shape: Tuple[int, int],
         num_examples: int,
         flip_probability: float = 0.5,
+        crop_fom_source_images: bool = True,
     ) -> "UpscaleDataset":
         """
         Construct the data generator.
@@ -54,30 +56,40 @@ class UpscaleDataset:
             output_shape: Desired shape of collage images (rows, cols)
             num_examples: Number of examples to randomly generate per epoch
             flip_probability: Probability of flipping last image vertically/horizontally
+            crop_fom_source_images: Randomly crop source images before collaging if True,
+                collage full-size images otherwise
         """
         self.dataset_path_ = dataset_path
         self.output_shape_ = output_shape
         self.num_examples_ = num_examples
         self.flip_prob_ = flip_probability
+        self.crop_from_source_images_ = crop_fom_source_images
         self.dataset_ = []
         self.have_seen_full_dataset_ = False
 
     def __call__(self) -> Iterator[np.ndarray]:
         """
-        Allow the data generator to be called (by tensorflow) to yield training examples.
+        Allow the data generator to be called (by tensorflow) to yield training examples
 
         Yields:
             Training examples
         """
         source_images = self.full_dataset()
+        end_batch = False
         for _ in range(self.num_examples_):
             new_image = np.full(shape=self.output_shape_, fill_value=-1.0)
             while (free_idx := next_free_pixel(new_image)) is not None:
                 try:
                     src_img = next(source_images)
+                    if self.crop_from_source_images_:
+                        src_img = crop_randomly(src_img)
                 except StopIteration:
+                    if end_batch:
+                        raise RuntimeError("Iterator yielded no items")
                     source_images = self.full_dataset()
-                    src_img = next(source_images)
+                    end_batch = True
+                    continue
+                end_batch = False
                 y, x = free_idx
                 h, w, _ = src_img.shape
                 new_image = insert_image(
