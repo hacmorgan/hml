@@ -27,8 +27,9 @@ setup(
         "hml/models/pixel_art_vae.py",
         "hml/models/pixel_art_avae.py",
         "hml/models/sample_gan.py",
-        "hml/run_scripts/train-collage-vae",
-        "hml/production/generate-wallpaper",
+        "applications/generative",
+        "applications/run_scripts/train-collage-vae",
+        "applications/production/generate-wallpaper",
     ],
     install_requires=[
         "GitPython",
