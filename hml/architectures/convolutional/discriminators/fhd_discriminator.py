@@ -9,14 +9,80 @@ License: BSD
 
 from typing import Tuple
 
+from functools import partial
+
 import tensorflow as tf
 
 from tensorflow.keras import layers
 
 from hml.architectures.convolutional.blocks import Conv2dBlock, DenseBlock
+from hml.architectures.convolutional.blocks import conv_2d_block, dense_block
 
 
-class Discriminator(tf.keras.layers.Layer):
+def discriminator(
+    input_shape: Tuple[int, int, int] = (1152, 2048, 3),
+    conv_filters: int = 128,
+) -> tf.keras.models.Model:
+    """
+    Functional API discriminator
+    """
+    leaky_relu = partial(tf.nn.leaky_relu, alpha=0.2)
+    kernel_initializer = tf.keras.initializers.RandomNormal(stddev=0.02)
+    architecture = tf.keras.Sequential(
+        [
+            layers.InputLayer(input_shape=input_shape),
+            *conv_2d_block(
+                filters=conv_filters,
+                activation=leaky_relu,
+                kernel_initializer=kernel_initializer,
+            ),
+            # Output shape: (576, 1024, conv_filters)
+            *conv_2d_block(
+                filters=conv_filters,
+                activation=leaky_relu,
+                kernel_initializer=kernel_initializer,
+            ),
+            # Output shape: (288,  512, conv_filters)
+            *conv_2d_block(
+                filters=conv_filters,
+                activation=leaky_relu,
+                kernel_initializer=kernel_initializer,
+            ),
+            # Output shape: (144,  256, conv_filters)
+            *conv_2d_block(
+                filters=conv_filters,
+                activation=leaky_relu,
+                kernel_initializer=kernel_initializer,
+            ),
+            # Output shape: (72, 128, conv_filters)
+            *conv_2d_block(
+                filters=conv_filters,
+                activation=leaky_relu,
+                kernel_initializer=kernel_initializer,
+            ),
+            # Output shape: (36, 64, conv_filters)
+            *conv_2d_block(
+                filters=conv_filters,
+                activation=leaky_relu,
+                kernel_initializer=kernel_initializer,
+            ),
+            # Output shape: (18, 32, conv_filters)
+            *conv_2d_block(
+                filters=conv_filters,
+                activation=leaky_relu,
+                kernel_initializer=kernel_initializer,
+            ),
+            # Output shape: (9, 16, conv_filters)
+            layers.Flatten(),
+            layers.Dense(1, activation=tf.nn.sigmoid),
+        ]
+    )
+    architecture.build()
+    architecture.summary()
+    return architecture
+
+
+class Discriminator(tf.keras.models.Model):
     """
     Convolutional discriminator
 
@@ -46,7 +112,9 @@ class Discriminator(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            drop_prob=0,
+            activation=tf.nn.leaky_relu,
+            # useBN=False,
         )
         # Output shape: 576, 1024
         self.conv2 = Conv2dBlock(
@@ -54,7 +122,9 @@ class Discriminator(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            drop_prob=0,
+            activation=tf.nn.leaky_relu,
+            # useBN=False,
         )
         # Output shape: 288, 512
         self.conv3 = Conv2dBlock(
@@ -62,7 +132,9 @@ class Discriminator(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            drop_prob=0,
+            activation=tf.nn.leaky_relu,
+            # useBN=False,
         )
         # Output shape: 144, 256
         self.conv4 = Conv2dBlock(
@@ -70,7 +142,9 @@ class Discriminator(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            drop_prob=0,
+            activation=tf.nn.leaky_relu,
+            # useBN=False,
         )
         # Output shape: 72, 128
         self.conv5 = Conv2dBlock(
@@ -78,7 +152,9 @@ class Discriminator(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            drop_prob=0,
+            activation=tf.nn.leaky_relu,
+            # useBN=False,
         )
         # Output shape: 36, 64
         self.conv6 = Conv2dBlock(
@@ -86,7 +162,9 @@ class Discriminator(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            drop_prob=0,
+            activation=tf.nn.leaky_relu,
+            # useBN=False,
         )
         # Output shape: 18, 32
         self.conv7 = Conv2dBlock(
@@ -94,11 +172,19 @@ class Discriminator(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            drop_prob=0,
+            activation=tf.nn.leaky_relu,
+            # useBN=False,
         )
         # Output shape: 9, 16
         self.flattened = layers.Flatten()
-        self.encoding = DenseBlock(units=10, activation=tf.nn.sigmoid, useBN=False)
+        self.encoding = DenseBlock(
+            units=256,
+            activation=tf.nn.sigmoid,
+            regularise=0,
+            drop_prob=0,
+            # useBN=False
+        )
         self.prediction = layers.Dense(units=1, activation=tf.nn.sigmoid)
 
     def call(self, inputs: tf.Tensor, training=False):
@@ -139,3 +225,13 @@ class Discriminator(tf.keras.layers.Layer):
         hf = self.flattened(h7, training=training)
         enc = self.encoding(hf, training=training)
         return enc
+
+    def custom_compile(
+        self,
+        optimizer: tf.keras.optimizers.Optimizer,
+    ) -> None:
+        """
+        Compile the model
+        """
+        super().compile()
+        self.optimizer = optimizer

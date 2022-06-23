@@ -18,12 +18,17 @@ import time
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import PIL.Image
 
 import tensorflow as tf
-import tensorflow_probability as tfp
+import tensorflow_addons as tfa
 
-from hml.architectures.convolutional.generators.fhd_generator import Generator
+from hml.architectures.convolutional.generators.fhd_generator import (
+    generator,
+    Generator,
+)
 from hml.architectures.convolutional.discriminators.fhd_discriminator import (
+    discriminator,
     Discriminator,
 )
 
@@ -43,15 +48,17 @@ Currently training: {train_target}
 """
 
 
-class Model(tf.keras.models.Model):
+# class Model(tf.keras.models.Model):
+class Model:
     """
     Generative Adversarial Network
     """
 
     def __init__(
         self,
-        latent_dim: int = 256,
+        latent_dim: int = 128,
         input_shape: Tuple[int, int, int] = (1152, 2048, 3),
+        conv_filters: int = 64,
         checkpoint: Optional[str] = None,
         save_frequency: int = 10,
     ) -> "GAN":
@@ -67,33 +74,46 @@ class Model(tf.keras.models.Model):
         # High level parameters
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
+        self.conv_filters_ = conv_filters
         self.steps_per_epoch_ = 200
         self.checkpoint_path_ = checkpoint
         self.save_frequency_ = save_frequency
 
         # Networks
-        self.generator_ = Generator(latent_dim=latent_dim)
-        self.discriminator_ = Discriminator(input_shape=input_shape)
+        # self.generator_ = Generator(
+        #     latent_dim=latent_dim, conv_filters=self.conv_filters_
+        # )
+        self.generator_ = generator(
+            latent_dim=latent_dim, conv_filters=self.conv_filters_
+        )
+        # self.discriminator_ = Discriminator(
+        #     input_shape=input_shape, conv_filters=self.conv_filters_
+        # )
+        self.discriminator_ = discriminator(
+            input_shape=self.input_shape_, conv_filters=conv_filters
+        )
 
         # Learning rates
         self.generator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
             initial_learning_rate=1e-4,
-            decay_steps=self.steps_per_epoch_ * 1000,
+            decay_steps=self.steps_per_epoch_ * 10000,
             decay_rate=0.9,
         )
         self.discriminator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate=1e-4,
-            decay_steps=self.steps_per_epoch_ * 1000,
+            initial_learning_rate=1e-6,
+            decay_steps=self.steps_per_epoch_ * 10000,
             decay_rate=0.9,
         )
 
         # Optimizers
         self.generator_optimizer_ = tf.keras.optimizers.Adam(
-            learning_rate=self.generator_lr_
+            learning_rate=self.generator_lr_, beta_1=0.5
         )
-        self.discriminator_optimizer_ = tf.keras.optimizers.Adam(
-            learning_rate=self.discriminator_lr_
+        self.discriminator_optimizer_ = tfa.optimizers.AdamW(
+            learning_rate=self.discriminator_lr_, weight_decay=1e-7, beta_1=0.5
         )
+        # self.generator_.custom_compile(optimizer=self.generator_optimizer_)
+        # self.discriminator_.custom_compile(optimizer=self.discriminator_optimizer_)
 
         # Checkpoints
         self.checkpoint_ = tf.train.Checkpoint(
@@ -107,7 +127,17 @@ class Model(tf.keras.models.Model):
         if self.checkpoint_path_ is not None:
             self.checkpoint_.restore(self.checkpoint_path_)
 
-    @tf.function
+    def custom_compile(
+        self,
+    ) -> None:
+        """
+        Compile the model
+        """
+        super().compile()
+        self.generator_.custom_compile(optimizer=self.generator_optimizer_)
+        self.discriminator_.custom_compile(optimizer=self.discriminator_optimizer_)
+
+    # @tf.function
     def _train_step(
         self,
         images: tf.Tensor,
@@ -130,7 +160,7 @@ class Model(tf.keras.models.Model):
         with tf.GradientTape() as disc_tape, tf.GradientTape() as gen_tape:
 
             # Generate a new full-size image
-            generated_images = self.generator_(noise)
+            generated_images = self.generator_(noise, training=True)
 
             # Pass real and fake images through discriminator
             real_output = self.discriminator_(images, training=True)
@@ -144,18 +174,19 @@ class Model(tf.keras.models.Model):
             ) = compute_discriminator_loss(real_output, generated_output)
             generator_loss = compute_generator_loss(generated_output)
 
+        discriminator_gradients = disc_tape.gradient(
+            discriminator_loss, self.discriminator_.trainable_variables
+        )
+        generator_gradients = gen_tape.gradient(
+            generator_loss, self.generator_.trainable_variables
+        )
+
         # Compute gradients from losses and update weights
         if self.should_train_discriminator_:
-            discriminator_gradients = disc_tape.gradient(
-                discriminator_loss, self.discriminator_.trainable_variables
-            )
             self.discriminator_optimizer_.apply_gradients(
                 zip(discriminator_gradients, self.discriminator_.trainable_variables)
             )
         if self.should_train_generator_:
-            generator_gradients = gen_tape.gradient(
-                generator_loss, self.generator_.trainable_variables
-            )
             self.generator_optimizer_.apply_gradients(
                 zip(generator_gradients, self.generator_.trainable_variables)
             )
@@ -175,12 +206,15 @@ class Model(tf.keras.models.Model):
         """
         Generate and save images
         """
-        predictions = self.generator_(test_input)
+        predictions_raw = self.generator_(test_input)
+        predictions = (
+            (predictions_raw.numpy() * 255).astype(np.uint8).reshape(self.input_shape_)
+        )
         output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
-        cv2.imwrite(output_path, cv2.cvtColor(predictions.numpy(), cv2.COLOR_BGR2RGB))
-        return predictions
+        PIL.Image.fromarray(predictions).save(output_path)
+        return predictions_raw
 
-    def train(
+    def _train(
         self,
         model_dir: str,
         train_path: str,
@@ -247,26 +281,6 @@ class Model(tf.keras.models.Model):
             .cache()
             .prefetch(tf.data.AUTOTUNE)
         )
-        val_images = (
-            tf.data.Dataset.from_generator(
-                UpscaleDataset(
-                    dataset_path=val_path,
-                    output_shape=self.input_shape_,
-                    num_examples=1,
-                ),
-                output_signature=tf.TensorSpec(
-                    shape=self.input_shape_, dtype=tf.float32
-                ),
-            )
-            .batch(batch_size)
-            .cache()
-        )
-
-        # Save a few images for visualisation
-        train_test_image_batch = next(iter(train_images))
-        train_test_images = train_test_image_batch[:8, ...]
-        val_test_image_batch = next(iter(val_images))
-        val_test_images = val_test_image_batch[:8, ...]
 
         # Make progress dir and reproductions dir for outputs
         os.makedirs(
@@ -309,8 +323,8 @@ class Model(tf.keras.models.Model):
         log_dir = os.path.join(model_dir, "logs", "gradient_tape", current_time)
         summary_writer = tf.summary.create_file_writer(log_dir)
 
-        # Use the same seed throughout training, to see what the model does with the same
-        # input as it trains.
+        # Use the same seed throughout training, to see what the model does with the
+        # same input as it trains.
         seed = tf.random.normal(shape=[num_examples_to_generate, self.latent_dim_])
 
         # Start by training both networks
@@ -329,7 +343,6 @@ class Model(tf.keras.models.Model):
                 train_target = "generator"
 
             for step, image_batch in enumerate(train_images):
-                # for step, image_batch in enumerate(train_ds()):
                 # Perform training step
                 self._train_step(
                     images=image_batch,
@@ -340,6 +353,9 @@ class Model(tf.keras.models.Model):
                         "discriminator_loss_generated": discriminator_loss_generated_metric,
                     },
                 )
+
+                # print(f"{tf.reduce_mean(self.generator_.trainable_weights)}")
+                # print(f"{tf.reduce_mean(self.discriminator_.trainable_weights)}")
 
                 if step % 5 == 0:
                     print(
@@ -415,16 +431,30 @@ class Model(tf.keras.models.Model):
 
             # Switch who trains if appropriate
             this_generator_loss = generator_loss_metric.result()
-            should_train_generator, should_train_discriminator = decide_who_trains(
+            (
+                self.should_train_generator_,
+                self.should_train_discriminator_,
+            ) = decide_who_trains(
                 should_train_generator=self.should_train_generator_,
                 should_train_discriminator=self.should_train_discriminator_,
                 this_generator_loss=this_generator_loss,
                 last_generator_loss=last_generator_loss,
+                switch_training_loss_delta=0.01,
+                # start_training_discriminator_loss_threshold=1.0,
+                # start_training_generator_loss_threshold=2.0,
             )
             last_generator_loss = this_generator_loss
+            # if epoch % 4 == 0:
+            #     self.should_train_discriminator_ = not self.should_train_discriminator_
+            #     self.should_train_generator_ = not self.should_train_generator_
+            # else:
+            #     self.should_train_discriminator_ = False
+            #     self.should_train_generator_ = True
 
             # Reset metrics every epoch
             discriminator_loss_metric.reset_states()
+            discriminator_loss_real_metric.reset_states()
+            discriminator_loss_generated_metric.reset_states()
             generator_loss_metric.reset_states()
 
     def generate(

@@ -33,6 +33,14 @@ def decide_who_trains(
     discriminator's, because the generator is purely trying to fool the discriminator,
     while the discriminator is also trying to learn to classify real images, which it
     tends to get pretty good at, meaning its loss trends downward, at least to a point.
+
+    Args:
+        should_train_generator: True if currently training generator
+        should_train_discriminator: True if currently training discriminator
+        this_generator_loss: Loss metric for generator after current epoch
+        last_generator_loss: Loss metric for generator after previous epoch
+        switch_training_loss_delta: If change in loss for this epoch is greater than
+            this, the model is still learning
     """
     loss_delta = abs(this_generator_loss - last_generator_loss)
     if should_train_discriminator == should_train_generator:

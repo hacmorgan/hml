@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import Callable, List, Tuple, Union
 
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -52,18 +52,29 @@ class DenseBlock(tf.keras.layers.Layer):
 
 
 def conv_2d_block(
-    filters: int, activation: str = "relu", batch_norm: bool = True
+    filters: int,
+    activation: str = "relu",
+    batch_norm: bool = True,
+    kernel_initializer: Union[
+        str, tf.keras.initializers.Initializer
+    ] = "glorot_uniform",
 ) -> List[layers.Layer]:
     """
     Standard convolutional block
     """
     block = [
-        layers.Conv2D(filters, kernel_size=5, strides=2, padding="same"),
+        layers.Conv2D(
+            filters,
+            kernel_size=5,
+            strides=2,
+            padding="same",
+            kernel_initializer=kernel_initializer,
+        ),
     ]
+    if activation:
+        block.append(layers.Activation(activation))
     if batch_norm:
         block.append(layers.BatchNormalization())
-    if activation == "relu":
-        block.append(layers.ReLU())
     return block
 
 
@@ -117,18 +128,29 @@ class Conv2dBlock(tf.keras.layers.Layer):
 
 
 def deconv_2d_block(
-    filters: int, activation: str = "relu", batch_norm: bool = True
+    filters: int,
+    activation: Union[str, Callable] = tf.nn.relu,
+    batch_norm: bool = True,
+    kernel_initializer: Union[
+        str, tf.keras.initializers.Initializer
+    ] = "glorot_uniform",
 ) -> List[layers.Layer]:
     """
-    Standard densely connected block
+    Standard densely connected block - functional API
     """
     block = [
-        layers.Conv2DTranspose(filters, kernel_size=5, strides=2, padding="same"),
+        layers.Conv2DTranspose(
+            filters,
+            kernel_size=5,
+            strides=2,
+            padding="same",
+            kernel_initializer=kernel_initializer,
+        ),
     ]
+    if activation:
+        block.append(layers.Activation(activation))
     if batch_norm:
         block.append(layers.BatchNormalization())
-    if activation == "relu":
-        block.append(layers.ReLU())
     return block
 
 

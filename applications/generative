@@ -33,10 +33,11 @@ def main(args: argparse.Namespace) -> int:
     # Instantiate the model
     model_module = importlib.import_module(f"hml.models.{args.model_class}")
     model = model_module.Model(checkpoint=args.checkpoint)
+    # model.custom_compile()
 
     # Run the model's train/generate method
     if args.mode == "train":
-        model.train(
+        model._train(
             model_dir=os.path.join(args.models_dir, args.model_name),
             train_path=args.train_path,
             val_path=args.val_path,
@@ -77,7 +78,6 @@ def get_args() -> argparse.Namespace:
         "--model-class",
         "-m",
         type=str,
-        default="gan",
         help="Generative model to use. `Model` class is imported from hml.models.<model_class>",
     )
 
