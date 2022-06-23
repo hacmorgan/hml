@@ -51,7 +51,7 @@ class Encoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            batch_norm=False,
         )
         # Output shape: 576, 1024
         self.conv2 = Conv2dBlock(
@@ -59,7 +59,7 @@ class Encoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            batch_norm=False,
         )
         # Output shape: 288, 512
         self.conv3 = Conv2dBlock(
@@ -67,7 +67,7 @@ class Encoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            batch_norm=False,
         )
         # Output shape: 144, 256
         self.conv4 = Conv2dBlock(
@@ -75,7 +75,7 @@ class Encoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            batch_norm=False,
         )
         # Output shape: 72, 128
         self.conv5 = Conv2dBlock(
@@ -83,7 +83,7 @@ class Encoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            batch_norm=False,
         )
         # Output shape: 36, 64
         self.conv6 = Conv2dBlock(
@@ -91,7 +91,7 @@ class Encoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            batch_norm=False,
         )
         # Output shape: 18, 32
         self.conv7 = Conv2dBlock(
@@ -99,7 +99,7 @@ class Encoder(tf.keras.layers.Layer):
             kernel_size=5,
             strides=(2, 2),
             regularise=0,
-            useBN=False,
+            batch_norm=False,
         )
         # Output shape: 9, 16
         self.flattened = layers.Flatten()

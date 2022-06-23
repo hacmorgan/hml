@@ -25,12 +25,12 @@ def dense_block(
 
 class DenseBlock(tf.keras.layers.Layer):
     def __init__(
-        self, units, regularise=0.01, drop_prob=0.2, activation=tf.nn.relu, useBN=True
+        self, units, regularise=0.01, drop_prob=0.2, activation=tf.nn.relu, batch_norm=True
     ):
         super(DenseBlock, self).__init__()
         self.units = units
         self.activation = activation
-        self.useBN = useBN
+        self.batch_norm = batch_norm
 
         if regularise == 0:
             self.dense = tf.keras.layers.Dense(units, activation=None)
@@ -48,7 +48,7 @@ class DenseBlock(tf.keras.layers.Layer):
     def call(self, inputs, training=False):
 
         h = self.dense(inputs)
-        if self.useBN:
+        if self.batch_norm:
             h = self.bn(h, training)
         if self.activation:
             h = self.activation(h)
@@ -93,7 +93,7 @@ class Conv2dBlock(tf.keras.layers.Layer):
         regularise=0.01,
         drop_prob=0.2,
         activation=tf.nn.relu,
-        useBN=True,
+        batch_norm=True,
     ):
         super().__init__()
         self.filters = filters
@@ -101,7 +101,7 @@ class Conv2dBlock(tf.keras.layers.Layer):
         self.strides = strides
         self.padding = padding
         self.activation = activation
-        self.useBN = useBN
+        self.batch_norm = batch_norm
 
         if regularise == 0:
             self.conv = tf.keras.layers.Conv2D(
@@ -124,7 +124,7 @@ class Conv2dBlock(tf.keras.layers.Layer):
     def call(self, inputs, training=False):
 
         h = self.conv(inputs)
-        if self.useBN:
+        if self.batch_norm:
             h = self.bn(h, training)
         if self.activation:
             h = self.activation(h)
@@ -177,7 +177,7 @@ class Deconv2dBlock(tf.keras.layers.Layer):
         self.strides = strides
         self.padding = padding
         self.activation = activation
-        self.batch = useBN
+        self.batch = batch_norm
 
         if regularise == 0:
             self.conv = tf.keras.layers.Conv2DTranspose(
@@ -199,7 +199,7 @@ class Deconv2dBlock(tf.keras.layers.Layer):
 
     def call(self, inputs, training=False):
         h = self.conv(inputs)
-        if self.useBN:
+        if self.batch_norm:
             h = self.bn(h, training)
         if self.activation:
             h = self.activation(h)

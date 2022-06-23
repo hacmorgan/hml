@@ -92,7 +92,7 @@ class Generator(tf.keras.models.Model):
             units=(9 * 16 * conv_filters),
             regularise=0,
             drop_prob=0,
-            # useBN=False,
+            # batch_norm=False,
         )
         self.reshape = layers.Reshape((9, 16, conv_filters))
         self.conv1 = Deconv2dBlock(
@@ -101,7 +101,7 @@ class Generator(tf.keras.models.Model):
             strides=(2, 2),
             regularise=0,
             drop_prob=0,
-            # useBN=False,
+            # batch_norm=False,
         )
         # Output shape: 18, 32
         self.conv2 = Deconv2dBlock(
@@ -110,7 +110,7 @@ class Generator(tf.keras.models.Model):
             strides=(2, 2),
             regularise=0,
             drop_prob=0,
-            # useBN=False,
+            # batch_norm=False,
         )
         # Output shape: 36, 64
         self.conv3 = Deconv2dBlock(
@@ -119,7 +119,7 @@ class Generator(tf.keras.models.Model):
             strides=(2, 2),
             regularise=0,
             drop_prob=0,
-            # useBN=False,
+            # batch_norm=False,
         )
         # Output shape: 72, 128
         self.conv4 = Deconv2dBlock(
@@ -128,7 +128,7 @@ class Generator(tf.keras.models.Model):
             strides=(2, 2),
             regularise=0,
             drop_prob=0,
-            # useBN=False,
+            # batch_norm=False,
         )
         # Output shape: 144, 256
         self.conv5 = Deconv2dBlock(
@@ -137,7 +137,7 @@ class Generator(tf.keras.models.Model):
             strides=(2, 2),
             regularise=0,
             drop_prob=0,
-            # useBN=False,
+            # batch_norm=False,
         )
         # Output shape: 288, 512
         self.conv6 = Deconv2dBlock(
@@ -146,7 +146,7 @@ class Generator(tf.keras.models.Model):
             strides=(2, 2),
             regularise=0,
             drop_prob=0,
-            # useBN=False,
+            # batch_norm=False,
         )
         # Output shape: 576, 1024
         self.conv7 = Deconv2dBlock(
