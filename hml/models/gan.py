@@ -75,7 +75,7 @@ class Model:
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
         self.conv_filters_ = conv_filters
-        self.steps_per_epoch_ = 200
+        self.steps_per_epoch_ = 100
         self.checkpoint_path_ = checkpoint
         self.save_frequency_ = save_frequency
 
@@ -95,12 +95,12 @@ class Model:
 
         # Learning rates
         self.generator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate=1e-4,
+            initial_learning_rate=1e-9,
             decay_steps=self.steps_per_epoch_ * 10000,
             decay_rate=0.9,
         )
         self.discriminator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate=1e-6,
+            initial_learning_rate=1e-9,
             decay_steps=self.steps_per_epoch_ * 10000,
             decay_rate=0.9,
         )
@@ -110,7 +110,7 @@ class Model:
             learning_rate=self.generator_lr_, beta_1=0.5
         )
         self.discriminator_optimizer_ = tfa.optimizers.AdamW(
-            learning_rate=self.discriminator_lr_, weight_decay=1e-7, beta_1=0.5
+            learning_rate=self.discriminator_lr_, weight_decay=1e-9, beta_1=0.5
         )
         # self.generator_.custom_compile(optimizer=self.generator_optimizer_)
         # self.discriminator_.custom_compile(optimizer=self.discriminator_optimizer_)

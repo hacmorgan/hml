@@ -74,7 +74,9 @@ def discriminator(
             ),
             # Output shape: (9, 16, conv_filters)
             layers.Flatten(),
-            layers.Dense(1, activation=tf.nn.sigmoid),
+            layers.Dense(
+                1, activation=tf.nn.sigmoid, kernel_initializer=kernel_initializer
+            ),
         ]
     )
     architecture.build()

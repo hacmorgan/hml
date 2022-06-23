@@ -30,7 +30,11 @@ def generator(
     architecture = tf.keras.Sequential(
         [
             layers.InputLayer(input_shape=latent_dim),
-            *dense_block(neurons=(9 * 16 * conv_filters)),
+            *dense_block(
+                neurons=(9 * 16 * conv_filters),
+                kernel_initializer=kernel_initializer,
+                use_bias=False,
+            ),
             layers.Reshape((9, 16, conv_filters)),
             # Output shape: (9, 16, conv_filters)
             *deconv_2d_block(
@@ -153,7 +157,7 @@ class Generator(tf.keras.models.Model):
             # activation=None,
             drop_prob=0,
             regularise=0,
-            useBN=False,
+            batch_norm=False,
         )
         # Output shape: 1152, 2048
 

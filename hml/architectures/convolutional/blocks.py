@@ -5,16 +5,21 @@ from tensorflow.keras import layers
 
 
 def dense_block(
-    neurons: int, activation: str = "relu", batch_norm: bool = True
+    neurons: int,
+    activation: Union[str, Callable] = tf.nn.relu,
+    batch_norm: bool = True,
+    kernel_initializer: Union[
+        str, tf.keras.initializers.Initializer
+    ] = "glorot_uniform",
 ) -> List[layers.Layer]:
     """
     Standard densely connected block
     """
-    block = [layers.Dense(neurons)]
+    block = [layers.Dense(neurons, kernel_initializer=kernel_initializer)]
     if batch_norm:
         block.append(layers.BatchNormalization())
-    if activation == "relu":
-        block.append(layers.ReLU())
+    if activation:
+        block.append(layers.Activation(activation))
     return block
 
 
@@ -53,7 +58,7 @@ class DenseBlock(tf.keras.layers.Layer):
 
 def conv_2d_block(
     filters: int,
-    activation: str = "relu",
+    activation: Union[str, Callable] = tf.nn.relu,
     batch_norm: bool = True,
     kernel_initializer: Union[
         str, tf.keras.initializers.Initializer
@@ -164,7 +169,7 @@ class Deconv2dBlock(tf.keras.layers.Layer):
         regularise=0.01,
         drop_prob=0.2,
         activation=tf.nn.relu,
-        useBN=True,
+        batch_norm=True,
     ):
         super().__init__()
         self.filters = filters
@@ -172,7 +177,7 @@ class Deconv2dBlock(tf.keras.layers.Layer):
         self.strides = strides
         self.padding = padding
         self.activation = activation
-        self.useBN = useBN
+        self.batch = useBN
 
         if regularise == 0:
             self.conv = tf.keras.layers.Conv2DTranspose(
