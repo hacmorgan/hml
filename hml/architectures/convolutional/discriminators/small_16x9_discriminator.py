@@ -31,46 +31,26 @@ def discriminator(
     architecture = tf.keras.Sequential(
         [
             layers.InputLayer(input_shape=input_shape),
-            *conv_2d_block(
-                filters=conv_filters,
-                activation=leaky_relu,
-                kernel_initializer=kernel_initializer,
-            ),
-            # Output shape: (576, 1024, conv_filters)
-            *conv_2d_block(
-                filters=conv_filters,
-                activation=leaky_relu,
-                kernel_initializer=kernel_initializer,
-            ),
-            # Output shape: (288,  512, conv_filters)
-            *conv_2d_block(
-                filters=conv_filters,
-                activation=leaky_relu,
-                kernel_initializer=kernel_initializer,
-            ),
-            # Output shape: (144,  256, conv_filters)
-            *conv_2d_block(
-                filters=conv_filters,
-                activation=leaky_relu,
-                kernel_initializer=kernel_initializer,
-            ),
             # Output shape: (72, 128, conv_filters)
             *conv_2d_block(
                 filters=conv_filters,
                 activation=leaky_relu,
                 kernel_initializer=kernel_initializer,
+                batch_norm=False,
             ),
             # Output shape: (36, 64, conv_filters)
             *conv_2d_block(
                 filters=conv_filters,
                 activation=leaky_relu,
                 kernel_initializer=kernel_initializer,
+                batch_norm=False,
             ),
             # Output shape: (18, 32, conv_filters)
             *conv_2d_block(
                 filters=conv_filters,
                 activation=leaky_relu,
                 kernel_initializer=kernel_initializer,
+                batch_norm=False,
             ),
             # Output shape: (9, 16, conv_filters)
             layers.Flatten(),

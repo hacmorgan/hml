@@ -23,13 +23,18 @@ import PIL.Image
 import tensorflow as tf
 import tensorflow_addons as tfa
 
-from hml.architectures.convolutional.generators.fhd_generator import (
-    generator,
-    Generator,
-)
-from hml.architectures.convolutional.discriminators.fhd_discriminator import (
+# from hml.architectures.convolutional.generators.fhd_generator import (
+#     generator,
+#     Generator,
+# )
+# from hml.architectures.convolutional.discriminators.fhd_discriminator import (
+#     discriminator,
+#     Discriminator,
+# )
+from hml.architectures.convolutional.generators.generator import generator
+from hml.architectures.convolutional.discriminators.discriminator import (
     discriminator,
-    Discriminator,
+    LATENT_SHAPE_WIDE,
 )
 
 from hml.data_pipelines.unsupervised.upscale_collage import UpscaleDataset
@@ -56,9 +61,9 @@ class Model:
 
     def __init__(
         self,
-        latent_dim: int = 128,
-        input_shape: Tuple[int, int, int] = (1152, 2048, 3),
-        conv_filters: int = 64,
+        latent_dim: int = 256,
+        input_shape: Tuple[int, int, int] = (72, 128, 3),
+        conv_filters: int = 256,
         checkpoint: Optional[str] = None,
         save_frequency: int = 10,
     ) -> "GAN":
@@ -75,7 +80,7 @@ class Model:
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
         self.conv_filters_ = conv_filters
-        self.steps_per_epoch_ = 100
+        self.steps_per_epoch_ = 5000
         self.checkpoint_path_ = checkpoint
         self.save_frequency_ = save_frequency
 
@@ -84,23 +89,28 @@ class Model:
         #     latent_dim=latent_dim, conv_filters=self.conv_filters_
         # )
         self.generator_ = generator(
-            latent_dim=latent_dim, conv_filters=self.conv_filters_
+            output_shape=self.input_shape_,
+            latent_dim=self.latent_dim_,
+            conv_filters=self.conv_filters_,
+            latent_shape=LATENT_SHAPE_WIDE,
         )
         # self.discriminator_ = Discriminator(
         #     input_shape=input_shape, conv_filters=self.conv_filters_
         # )
         self.discriminator_ = discriminator(
-            input_shape=self.input_shape_, conv_filters=conv_filters
+            input_shape=self.input_shape_,
+            conv_filters=self.conv_filters_,
+            latent_shape=LATENT_SHAPE_WIDE,
         )
 
         # Learning rates
         self.generator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate=1e-9,
+            initial_learning_rate=1e-4,
             decay_steps=self.steps_per_epoch_ * 10000,
             decay_rate=0.9,
         )
         self.discriminator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate=1e-9,
+            initial_learning_rate=1e-5,
             decay_steps=self.steps_per_epoch_ * 10000,
             decay_rate=0.9,
         )
@@ -109,8 +119,8 @@ class Model:
         self.generator_optimizer_ = tf.keras.optimizers.Adam(
             learning_rate=self.generator_lr_, beta_1=0.5
         )
-        self.discriminator_optimizer_ = tfa.optimizers.AdamW(
-            learning_rate=self.discriminator_lr_, weight_decay=1e-9, beta_1=0.5
+        self.discriminator_optimizer_ = tf.keras.optimizers.Adam(
+            learning_rate=self.discriminator_lr_, beta_1=0.5
         )
         # self.generator_.custom_compile(optimizer=self.generator_optimizer_)
         # self.discriminator_.custom_compile(optimizer=self.discriminator_optimizer_)
@@ -155,7 +165,7 @@ class Model:
             latent_dim: Size of latent space
         """
         # Generate a new seed to generate a set of new images
-        noise = tf.random.normal([1, self.latent_dim_])
+        noise = tf.random.normal([tf.shape(images)[0], self.latent_dim_])
 
         with tf.GradientTape() as disc_tape, tf.GradientTape() as gen_tape:
 
@@ -220,7 +230,7 @@ class Model:
         train_path: str,
         val_path: str,
         epochs: int = 20000,
-        batch_size: int = 1,
+        batch_size: int = 64,
         num_examples_to_generate: int = 1,
         save_frequency: int = 10,
         debug: bool = False,
@@ -279,6 +289,7 @@ class Model:
             )
             .batch(batch_size)
             .cache()
+            .shuffle(1000)
             .prefetch(tf.data.AUTOTUNE)
         )
 
@@ -421,6 +432,7 @@ class Model:
                 # Example outputs
                 tf.summary.image("Consistent generation", generated_same, step=epoch)
                 tf.summary.image("Random generation", generated_new, step=epoch)
+                tf.summary.image("Training example", image_batch[0:1], step=epoch)
 
             # Save the model every 2 epochs
             if (epoch + 1) % save_frequency == 0:

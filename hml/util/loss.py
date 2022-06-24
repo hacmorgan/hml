@@ -15,7 +15,7 @@ import tensorflow as tf
 
 
 # This method returns a helper function to compute binary crossentropy loss
-bce = tf.keras.losses.BinaryCrossentropy()
+bce = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
 
 def compute_generator_loss(

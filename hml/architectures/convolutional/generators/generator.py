@@ -9,6 +9,8 @@ License: BSD
 
 from typing import Tuple
 
+import sys
+
 import tensorflow as tf
 
 from tensorflow.keras import layers
@@ -21,67 +23,66 @@ from hml.architectures.convolutional.blocks import (
 )
 
 
+LATENT_SHAPE_SQUARE = (8, 8)
+LATENT_SHAPE_WIDE = (9, 16)
+LATENT_SHAPE_ULTRAWIDE = (9, 32)
+
+
 def generator(
+    output_shape: Tuple[int, int, int],
     latent_dim: int = 256,
     conv_filters: int = 128,
+    latent_shape: Tuple[int, int] = LATENT_SHAPE_WIDE,
 ) -> tf.keras.models.Model:
-    """ """
+    """
+    Convolutional generator
+
+    Adds fractionally strided convolutions until the desired output size is met
+    """
     kernel_initializer = tf.keras.initializers.RandomNormal(stddev=0.02)
-    architecture = tf.keras.Sequential(
-        [
-            layers.InputLayer(input_shape=latent_dim),
-            *dense_block(
-                neurons=(9 * 16 * conv_filters),
-                kernel_initializer=kernel_initializer,
-                bias=False,
-            ),
-            layers.Reshape((9, 16, conv_filters)),
-            # Output shape: (9, 16, conv_filters)
-            *deconv_2d_block(
-                filters=conv_filters,
-                kernel_initializer=kernel_initializer,
-                bias=False,
-            ),
-            # Output shape: (18, 32, conv_filters)
-            *deconv_2d_block(
-                filters=conv_filters,
-                kernel_initializer=kernel_initializer,
-                bias=False,
-            ),
-            # Output shape: (36, 64, conv_filters)
-            *deconv_2d_block(
-                filters=conv_filters,
-                kernel_initializer=kernel_initializer,
-                bias=False,
-            ),
-            # Output shape: (72, 128, conv_filters)
-            *deconv_2d_block(
-                filters=conv_filters,
-                kernel_initializer=kernel_initializer,
-                bias=False,
-            ),
-            # Output shape: (144,  256, conv_filters)
-            *deconv_2d_block(
-                filters=conv_filters,
-                kernel_initializer=kernel_initializer,
-                bias=False,
-            ),
-            # Output shape: (288,  512, conv_filters)
-            *deconv_2d_block(
-                filters=conv_filters,
-                kernel_initializer=kernel_initializer,
-                bias=False,
-            ),
-            # Output shape: (576, 1024, conv_filters)
-            *deconv_2d_block(
-                filters=3,
-                activation=tf.nn.sigmoid,
-                kernel_initializer=kernel_initializer,
-                bias=False,
-            ),
-            # Output shape: (1152, 2048, 3)
-        ]
+
+    # Start with input and dense layers
+    network_layers = [
+        layers.InputLayer(input_shape=latent_dim),
+        *dense_block(
+            neurons=(latent_shape[0] * latent_shape[1] * conv_filters),
+            kernel_initializer=kernel_initializer,
+            bias=False,
+            drop_prob=0,
+        ),
+        layers.Reshape(latent_shape + (conv_filters,)),
+    ]
+    shape = list(latent_shape)
+
+    # Add fractionally strided convs until output feature map is half the size of output
+    while shape[0] < output_shape[0] / 2 and shape[1] < output_shape[1] / 2:
+        network_layers += deconv_2d_block(
+            filters=conv_filters,
+            kernel_initializer=kernel_initializer,
+            bias=False,
+            drop_prob=0,
+        )
+        shape[0] *= 2
+        shape[1] *= 2
+
+    # Add output layer
+    network_layers += deconv_2d_block(
+        filters=3,
+        activation=tf.nn.sigmoid,
+        kernel_initializer=kernel_initializer,
+        bias=False,
+        drop_prob=0,
     )
+    shape[0] *= 2
+    shape[1] *= 2
+    if tuple(shape) != output_shape[:2]:
+        print(
+            f"Output shape not achievable, requested {output_shape}, achieved {shape}",
+            file=sys.stderr,
+        )
+
+    # Build the network
+    architecture = tf.keras.Sequential(network_layers)
     architecture.build()
     architecture.summary()
     return architecture

@@ -22,14 +22,14 @@ def normalise(image: np.ndarray) -> np.ndarray:
     """
     Normalise an image with pixel values on [0, 255] to [0, 1]
     """
-    return image / 255
+    return image.astype(np.float32) / 255.0
 
 
 def normalise_tanh(image: np.ndarray) -> np.ndarray:
     """
     Normalise an image with pixel values on [0, 255] to [-1, 1]
     """
-    return (image - 127.5) / 127.5
+    return (image.astype(np.float32) - 127.5) / 127.5
 
 
 def load_image(image_path: str) -> Optional[np.ndarray]:

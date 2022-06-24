@@ -32,6 +32,7 @@ from hml.data_pipelines.utils import (
     insert_image,
     load_image,
     normalise,
+    normalise_tanh,
 )
 
 
@@ -118,6 +119,7 @@ class UpscaleDataset:
             if image_np is None:
                 continue
             normalised = normalise(image_np)
+            # normalised = normalise_tanh(image_np)
             self.dataset_.append(normalised)
             yield normalised
         self.have_seen_full_dataset_ = True

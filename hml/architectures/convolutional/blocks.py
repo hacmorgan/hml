@@ -8,6 +8,8 @@ def dense_block(
     neurons: int,
     activation: Union[str, Callable] = tf.nn.relu,
     batch_norm: bool = True,
+    bias: bool = True,
+    drop_prob: float = 0.3,
     kernel_initializer: Union[
         str, tf.keras.initializers.Initializer
     ] = "glorot_uniform",
@@ -15,17 +17,26 @@ def dense_block(
     """
     Standard densely connected block
     """
-    block = [layers.Dense(neurons, kernel_initializer=kernel_initializer)]
+    block = [
+        layers.Dense(neurons, kernel_initializer=kernel_initializer, use_bias=bias)
+    ]
     if batch_norm:
         block.append(layers.BatchNormalization())
     if activation:
         block.append(layers.Activation(activation))
+    if drop_prob:
+        block.append(layers.Dropout(drop_prob))
     return block
 
 
 class DenseBlock(tf.keras.layers.Layer):
     def __init__(
-        self, units, regularise=0.01, drop_prob=0.2, activation=tf.nn.relu, batch_norm=True
+        self,
+        units,
+        regularise=0.01,
+        drop_prob=0.2,
+        activation=tf.nn.relu,
+        batch_norm=True,
     ):
         super(DenseBlock, self).__init__()
         self.units = units
@@ -60,6 +71,8 @@ def conv_2d_block(
     filters: int,
     activation: Union[str, Callable] = tf.nn.relu,
     batch_norm: bool = True,
+    bias: bool = True,
+    drop_prob: float = 0.3,
     kernel_initializer: Union[
         str, tf.keras.initializers.Initializer
     ] = "glorot_uniform",
@@ -74,12 +87,15 @@ def conv_2d_block(
             strides=2,
             padding="same",
             kernel_initializer=kernel_initializer,
+            use_bias=bias,
         ),
     ]
-    if activation:
-        block.append(layers.Activation(activation))
     if batch_norm:
         block.append(layers.BatchNormalization())
+    if activation:
+        block.append(layers.Activation(activation))
+    if drop_prob:
+        block.append(layers.Dropout(drop_prob))
     return block
 
 
@@ -136,6 +152,8 @@ def deconv_2d_block(
     filters: int,
     activation: Union[str, Callable] = tf.nn.relu,
     batch_norm: bool = True,
+    bias: bool = True,
+    drop_prob: float = 0.3,
     kernel_initializer: Union[
         str, tf.keras.initializers.Initializer
     ] = "glorot_uniform",
@@ -150,12 +168,15 @@ def deconv_2d_block(
             strides=2,
             padding="same",
             kernel_initializer=kernel_initializer,
+            use_bias=bias,
         ),
     ]
     if activation:
         block.append(layers.Activation(activation))
     if batch_norm:
         block.append(layers.BatchNormalization())
+    if drop_prob:
+        block.append(layers.Dropout(drop_prob))
     return block
 
 
