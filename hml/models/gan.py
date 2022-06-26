@@ -61,11 +61,12 @@ class Model:
 
     def __init__(
         self,
-        latent_dim: int = 256,
-        input_shape: Tuple[int, int, int] = (72, 128, 3),
-        conv_filters: int = 256,
+        latent_dim: int = 128,
+        # input_shape: Tuple[int, int, int] = (72, 128, 3),
+        input_shape: Tuple[int, int, int] = (1152, 2048, 3),
+        conv_filters: int = 192,
         checkpoint: Optional[str] = None,
-        save_frequency: int = 10,
+        save_frequency: int = 50,
     ) -> "GAN":
         """
         Construct the GAN
@@ -80,7 +81,7 @@ class Model:
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
         self.conv_filters_ = conv_filters
-        self.steps_per_epoch_ = 5000
+        self.steps_per_epoch_ = 200
         self.checkpoint_path_ = checkpoint
         self.save_frequency_ = save_frequency
 
@@ -106,12 +107,12 @@ class Model:
         # Learning rates
         self.generator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
             initial_learning_rate=1e-4,
-            decay_steps=self.steps_per_epoch_ * 10000,
+            decay_steps=self.steps_per_epoch_ * 20000,
             decay_rate=0.9,
         )
         self.discriminator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
             initial_learning_rate=1e-5,
-            decay_steps=self.steps_per_epoch_ * 10000,
+            decay_steps=self.steps_per_epoch_ * 20000,
             decay_rate=0.9,
         )
 
@@ -230,9 +231,8 @@ class Model:
         train_path: str,
         val_path: str,
         epochs: int = 20000,
-        batch_size: int = 64,
+        batch_size: int = 1,
         num_examples_to_generate: int = 1,
-        save_frequency: int = 10,
         debug: bool = False,
     ) -> None:
         """
@@ -289,7 +289,7 @@ class Model:
             )
             .batch(batch_size)
             .cache()
-            .shuffle(1000)
+            .shuffle(self.steps_per_epoch_)
             .prefetch(tf.data.AUTOTUNE)
         )
 
@@ -435,7 +435,7 @@ class Model:
                 tf.summary.image("Training example", image_batch[0:1], step=epoch)
 
             # Save the model every 2 epochs
-            if (epoch + 1) % save_frequency == 0:
+            if (epoch + 1) % self.save_frequency_ == 0:
                 self.checkpoint_.save(file_prefix=checkpoint_prefix)
 
                 # Also close all pyplot figures. It is expensive to do this every epoch
