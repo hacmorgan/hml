@@ -69,6 +69,7 @@ class DenseBlock(tf.keras.layers.Layer):
 
 def conv_2d_block(
     filters: int,
+    strides: int = 2,
     activation: Union[str, Callable] = tf.nn.relu,
     batch_norm: bool = True,
     bias: bool = True,
@@ -84,7 +85,7 @@ def conv_2d_block(
         layers.Conv2D(
             filters,
             kernel_size=5,
-            strides=2,
+            strides=strides,
             padding="same",
             kernel_initializer=kernel_initializer,
             use_bias=bias,
@@ -150,6 +151,7 @@ class Conv2dBlock(tf.keras.layers.Layer):
 
 def deconv_2d_block(
     filters: int,
+    strides: int = 2,
     activation: Union[str, Callable] = tf.nn.relu,
     batch_norm: bool = True,
     bias: bool = True,
@@ -165,7 +167,7 @@ def deconv_2d_block(
         layers.Conv2DTranspose(
             filters,
             kernel_size=5,
-            strides=2,
+            strides=strides,
             padding="same",
             kernel_initializer=kernel_initializer,
             use_bias=bias,

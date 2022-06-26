@@ -63,8 +63,9 @@ class Model:
         self,
         latent_dim: int = 128,
         # input_shape: Tuple[int, int, int] = (72, 128, 3),
-        input_shape: Tuple[int, int, int] = (1152, 2048, 3),
-        conv_filters: int = 192,
+        # input_shape: Tuple[int, int, int] = (1152, 2048, 3),  # stride 2
+        input_shape: Tuple[int, int, int] = (2187, 3888, 3),  # stride 3
+        conv_filters: int = 128,
         checkpoint: Optional[str] = None,
         save_frequency: int = 50,
     ) -> "GAN":
@@ -94,6 +95,7 @@ class Model:
             latent_dim=self.latent_dim_,
             conv_filters=self.conv_filters_,
             latent_shape=LATENT_SHAPE_WIDE,
+            strides=3,
         )
         # self.discriminator_ = Discriminator(
         #     input_shape=input_shape, conv_filters=self.conv_filters_
@@ -102,6 +104,7 @@ class Model:
             input_shape=self.input_shape_,
             conv_filters=self.conv_filters_,
             latent_shape=LATENT_SHAPE_WIDE,
+            strides=3,
         )
 
         # Learning rates

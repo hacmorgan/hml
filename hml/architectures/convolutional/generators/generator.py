@@ -33,6 +33,7 @@ def generator(
     latent_dim: int = 256,
     conv_filters: int = 128,
     latent_shape: Tuple[int, int] = LATENT_SHAPE_WIDE,
+    strides: int = 2,
 ) -> tf.keras.models.Model:
     """
     Convolutional generator
@@ -55,15 +56,16 @@ def generator(
     shape = list(latent_shape)
 
     # Add fractionally strided convs until output feature map is half the size of output
-    while shape[0] < output_shape[0] / 2 and shape[1] < output_shape[1] / 2:
+    while shape[0] < output_shape[0] / strides and shape[1] < output_shape[1] / strides:
         network_layers += deconv_2d_block(
             filters=conv_filters,
             kernel_initializer=kernel_initializer,
             bias=False,
             drop_prob=0,
+            strides=strides,
         )
-        shape[0] *= 2
-        shape[1] *= 2
+        shape[0] *= strides
+        shape[1] *= strides
 
     # Add output layer
     network_layers += deconv_2d_block(
@@ -72,9 +74,10 @@ def generator(
         kernel_initializer=kernel_initializer,
         bias=False,
         drop_prob=0,
+        strides=strides,
     )
-    shape[0] *= 2
-    shape[1] *= 2
+    shape[0] *= strides
+    shape[1] *= strides
     if tuple(shape) != output_shape[:2]:
         print(
             f"Output shape not achievable, requested {output_shape}, achieved {shape}",

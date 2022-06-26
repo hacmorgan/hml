@@ -33,6 +33,7 @@ def discriminator(
     input_shape: Tuple[int, int, int],
     conv_filters: int,
     latent_shape: Tuple[int, int],
+    strides: int = 2,
 ) -> tf.keras.models.Model:
     """
     Convolutional generator
@@ -53,9 +54,10 @@ def discriminator(
             activation=leaky_relu,
             kernel_initializer=kernel_initializer,
             batch_norm=False,
+            strides=strides,
         )
-        shape[0] /= 2
-        shape[1] /= 2
+        shape[0] /= strides
+        shape[1] /= strides
 
     # Verify latent shape
     if tuple(shape) != latent_shape[:2]:
