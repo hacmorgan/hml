@@ -12,8 +12,8 @@ from typing import Tuple
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from hml.architectures.convolutional.decoders.fhd_decoder import Decoder
-from hml.architectures.convolutional.encoders.fhd_encoder import Encoder
+from hml.architectures.convolutional.generators.generator import generator
+from hml.architectures.convolutional.encoders.encoder import Encoder
 
 
 class VariationalAutoEncoder(tf.keras.layers.Layer):
@@ -22,7 +22,11 @@ class VariationalAutoEncoder(tf.keras.layers.Layer):
     """
 
     def __init__(
-        self, latent_dim: int = 100, input_shape: Tuple[int, int, int] = (64, 64, 3)
+        self,
+        latent_dim: int = 100,
+        input_shape: Tuple[int, int, int] = (64, 64, 3),
+        conv_filters: int = 128,
+        strides: int = 2,
     ) -> "VAE":
         """
         Construct the autoencoder
@@ -33,8 +37,18 @@ class VariationalAutoEncoder(tf.keras.layers.Layer):
         super().__init__()
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
-        self.encoder_ = Encoder(latent_dim=self.latent_dim_, input_shape=input_shape)
-        self.decoder_ = Decoder(latent_dim=self.latent_dim_)
+        self.encoder_ = Encoder(
+            latent_dim=self.latent_dim_,
+            input_shape=input_shape,
+            strides=strides,
+            conv_filters=conv_filters,
+        )
+        self.decoder_ = generator(
+            latent_dim=self.latent_dim_,
+            output_shape=input_shape,
+            conv_filters=conv_filters,
+            strides=strides,
+        )
         self.structure = ["encoder_", "decoder_"]
 
     def call(

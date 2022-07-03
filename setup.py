@@ -20,13 +20,6 @@ setup(
         "hml.util",
     ],
     scripts=[
-        "hml/models/vae.py",
-        "hml/models/flood_sharpvae.py",
-        "hml/models/pixel_art.py",
-        "hml/models/pixel_art_ae.py",
-        "hml/models/pixel_art_vae.py",
-        "hml/models/pixel_art_avae.py",
-        "hml/models/sample_gan.py",
         "applications/generative",
         "applications/run_scripts/train-collage-vae",
         "applications/production/generate-wallpaper",

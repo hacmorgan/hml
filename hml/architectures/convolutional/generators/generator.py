@@ -49,6 +49,7 @@ def generator(
             neurons=(latent_shape[0] * latent_shape[1] * conv_filters),
             kernel_initializer=kernel_initializer,
             bias=False,
+            batch_norm=False,
             drop_prob=0,
         ),
         layers.Reshape(latent_shape + (conv_filters,)),
@@ -61,6 +62,7 @@ def generator(
             filters=conv_filters,
             kernel_initializer=kernel_initializer,
             bias=False,
+            batch_norm=False,
             drop_prob=0,
             strides=strides,
         )
@@ -73,6 +75,7 @@ def generator(
         activation=tf.nn.sigmoid,
         kernel_initializer=kernel_initializer,
         bias=False,
+        batch_norm=False,
         drop_prob=0,
         strides=strides,
     )

@@ -68,7 +68,8 @@ class Model:
         conv_filters: int = 128,
         checkpoint: Optional[str] = None,
         save_frequency: int = 50,
-    ) -> "GAN":
+        # save_frequency: int = 1,
+    ) -> "Model":
         """
         Construct the GAN
 
@@ -82,7 +83,8 @@ class Model:
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
         self.conv_filters_ = conv_filters
-        self.steps_per_epoch_ = 200
+        self.steps_per_epoch_ = 50
+        # self.steps_per_epoch_ = 2
         self.checkpoint_path_ = checkpoint
         self.save_frequency_ = save_frequency
 
@@ -292,7 +294,8 @@ class Model:
             )
             .batch(batch_size)
             .cache()
-            .shuffle(self.steps_per_epoch_)
+            .shuffle(10)
+            # .shuffle(self.steps_per_epoch_)
             .prefetch(tf.data.AUTOTUNE)
         )
 

@@ -109,6 +109,9 @@ class Conv2dBlock(tf.keras.layers.Layer):
         padding="same",
         regularise=0.01,
         drop_prob=0.2,
+        kernel_initializer: Union[
+            str, tf.keras.initializers.Initializer
+        ] = "glorot_uniform",
         activation=tf.nn.relu,
         batch_norm=True,
     ):
@@ -122,7 +125,12 @@ class Conv2dBlock(tf.keras.layers.Layer):
 
         if regularise == 0:
             self.conv = tf.keras.layers.Conv2D(
-                filters, kernel_size, strides=strides, padding=padding, activation=None
+                filters,
+                kernel_size,
+                strides=strides,
+                padding=padding,
+                activation=None,
+                kernel_initializer=kernel_initializer,
             )
         else:
             self.conv = tf.keras.layers.Conv2D(
@@ -133,6 +141,7 @@ class Conv2dBlock(tf.keras.layers.Layer):
                 activation=None,
                 kernel_regularizer=tf.keras.regularizers.L1(regularise),
                 activity_regularizer=tf.keras.regularizers.L2(regularise),
+                kernel_initializer=kernel_initializer,
             )
 
         self.drop = tf.keras.layers.Dropout(drop_prob)

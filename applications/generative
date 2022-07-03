@@ -33,7 +33,10 @@ def main(args: argparse.Namespace) -> int:
     # Instantiate the model
     model_module = importlib.import_module(f"hml.models.{args.model_class}")
     model = model_module.Model(checkpoint=args.checkpoint)
-    # model.custom_compile()
+    try:
+        model.custom_compile()
+    except AttributeError:
+        print("Not compiling model, custom_compile() method not found", file=sys.stderr)
 
     # Run the model's train/generate method
     if args.mode == "train":
