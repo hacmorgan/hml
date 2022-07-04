@@ -39,7 +39,7 @@ class Encoder(tf.keras.layers.Layer):
         self,
         latent_dim: int = 256,
         input_shape: Tuple[int, int, int] = (1152, 2048, 3),
-        latent_shape: Tuple[int, int] = LATENT_SHAPE_SQUARE,
+        latent_shape: Tuple[int, int] = LATENT_SHAPE_WIDE,
         strides: int = 2,
         conv_filters: int = 128,
     ) -> "Encoder":

@@ -252,7 +252,7 @@ class Model(tf.keras.models.Model):
             sharpness_loss_reconstructed,
         )
 
-    # @tf.function
+    @tf.function
     def _train_step(
         self,
         images: tf.Tensor,
