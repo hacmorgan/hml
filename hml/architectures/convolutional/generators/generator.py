@@ -30,7 +30,7 @@ LATENT_SHAPE_ULTRAWIDE = (9, 32)
 
 def generator(
     output_shape: Tuple[int, int, int],
-    latent_dim: int = 256,
+    latent_dim: int = 128,
     conv_filters: int = 128,
     latent_shape: Tuple[int, int] = LATENT_SHAPE_WIDE,
     strides: int = 2,

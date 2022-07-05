@@ -39,6 +39,8 @@ from hml.architectures.convolutional.discriminators.discriminator import (
 
 from hml.data_pipelines.unsupervised.upscale_collage import UpscaleDataset
 
+from hml.models import vae
+
 from hml.util.loss import compute_generator_loss, compute_discriminator_loss
 from hml.util.gan import decide_who_trains
 from hml.util.git import modified_files_in_git_repo, write_commit_hash_to_model_dir
@@ -61,12 +63,13 @@ class Model:
 
     def __init__(
         self,
-        latent_dim: int = 128,
+        latent_dim: int = 256,
         # input_shape: Tuple[int, int, int] = (72, 128, 3),
         # input_shape: Tuple[int, int, int] = (1152, 2048, 3),  # stride 2
         input_shape: Tuple[int, int, int] = (2187, 3888, 3),  # stride 3
         conv_filters: int = 128,
         checkpoint: Optional[str] = None,
+        vae_checkpoint: Optional[str] = None,
         save_frequency: int = 50,
         # save_frequency: int = 1,
     ) -> "Model":
@@ -86,6 +89,7 @@ class Model:
         self.steps_per_epoch_ = 50
         # self.steps_per_epoch_ = 2
         self.checkpoint_path_ = checkpoint
+        self.vae_checkpoint_path_ = vae_checkpoint
         self.save_frequency_ = save_frequency
 
         # Networks
@@ -111,7 +115,7 @@ class Model:
 
         # Learning rates
         self.generator_lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate=1e-4,
+            initial_learning_rate=1e-6,
             decay_steps=self.steps_per_epoch_ * 20000,
             decay_rate=0.9,
         )
@@ -139,9 +143,30 @@ class Model:
             generator_optimizer=self.generator_optimizer_,
         )
 
+        # Load generator weights from VAE decoder
+        if self.vae_checkpoint_path_ is not None:
+            self.load_vae_weights(checkpoint_path=self.vae_checkpoint_path_)
+
         # Restore model from checkpoint
         if self.checkpoint_path_ is not None:
             self.checkpoint_.restore(self.checkpoint_path_)
+
+    def load_vae_weights(self, checkpoint_path: str) -> None:
+        """
+        Load a vae model from a checkpoint to use its decoder's weights as pretrained
+        weights for the generator
+
+        Args:
+            checkpoint_path: Path of AE checkpoint
+        """
+        vae_model = vae.Model(
+            latent_dim=self.latent_dim_,
+            input_shape=self.input_shape_,
+            conv_filters=self.conv_filters_,
+            checkpoint=checkpoint_path,
+        )
+        self.generator_.set_weights(vae_model.net.decoder_.get_weights())
+        del vae_model
 
     def custom_compile(
         self,
