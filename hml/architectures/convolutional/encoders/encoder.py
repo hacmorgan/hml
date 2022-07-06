@@ -64,7 +64,7 @@ class Encoder(tf.keras.layers.Layer):
         self.conv_layers_ = []
         shape = list(input_shape[:2])
 
-        # Add strided convs until output feature map is half the size of output
+        # Add strided convs until output feature map is at desired latent shape
         while shape[0] > latent_shape[0] and shape[1] > latent_shape[1]:
             self.conv_layers_.append(
                 Conv2dBlock(

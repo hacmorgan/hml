@@ -177,7 +177,7 @@ class Model(tf.keras.models.Model):
         self,
         images: tf.Tensor,
         beta: float = 1e0,
-        delta: float = 0e1,
+        delta: float = 1e0,
         epsilon: float = 0e0,
     ) -> Tuple[float, float, float, float]:
         """
@@ -239,12 +239,12 @@ class Model(tf.keras.models.Model):
         )
 
         # Compute total loss and return
-        # loss = (
-        #     beta * kl_loss
-        #     + delta * sharpness_loss_generated
-        #     + epsilon * sharpness_loss_reconstructed
-        # )
-        loss = kl_loss
+        loss = (
+            beta * kl_loss
+            + delta * sharpness_loss_generated
+            + epsilon * sharpness_loss_reconstructed
+        )
+        # loss = kl_loss
         return (
             loss,
             kl_loss,
@@ -305,7 +305,12 @@ class Model(tf.keras.models.Model):
         """
         predictions = self.net.decoder_(test_input)
         output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
-        cv2.imwrite(output_path, cv2.cvtColor(predictions.numpy(), cv2.COLOR_BGR2RGB))
+        cv2.imwrite(
+            output_path,
+            cv2.cvtColor(
+                predictions.numpy().reshape(self.input_shape_), cv2.COLOR_BGR2RGB
+            ),
+        )
         return predictions
 
     def show_reproduction_quality(
@@ -322,7 +327,15 @@ class Model(tf.keras.models.Model):
         output_path = os.path.join(
             reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
         )
-        cv2.imwrite(output_path, cv2.cvtColor(stacked.numpy(), cv2.COLOR_BGR2RGB))
+        cv2.imwrite(
+            output_path,
+            cv2.cvtColor(
+                stacked.numpy().reshape(
+                    (self.input_shape_[0] * 2,) + self.input_shape_[1:]
+                ),
+                cv2.COLOR_BGR2RGB,
+            ),
+        )
         return stacked
 
     def compute_mse_losses(
@@ -521,78 +534,90 @@ class Model(tf.keras.models.Model):
                         )
                     )
 
-            # Produce demo output from the same seed and form a new seed each time
-            generated_same = self.generate_and_save_images(
-                epoch + 1, seed, generated_same_dir
-            )
-            generated_new = self.generate_and_save_images(
-                epoch + 1,
-                tf.random.normal(shape=[num_examples_to_generate, latent_dim]),
-                generated_new_dir,
-            )
-
-            # Show some examples of how the model reconstructs its inputs.
-            train_reconstructed = self.show_reproduction_quality(
-                epoch + 1,
-                train_test_images,
-                reproductions_dir,
-            )
-            val_reconstructed = self.show_reproduction_quality(
-                epoch + 1,
-                val_test_images,
-                val_reproductions_dir,
-            )
-
-            # Compute reconstruction loss on training and validation data
-            train_loss, val_loss = self.compute_mse_losses(
-                train_test_image_batch,
-                val_test_image_batch,
-            )
-
-            # Write to logs
-            with summary_writer.as_default():
-
-                # Losses
-                tf.summary.scalar(
-                    "VAE loss metric", vae_loss_metric.result(), step=epoch
+            if epoch % 10 == 0:
+                # Produce demo output from the same seed and form a new seed each time
+                generated_same = self.generate_and_save_images(
+                    epoch + 1, seed, generated_same_dir
                 )
-                tf.summary.scalar("KL loss metric", kl_loss_metric.result(), step=epoch)
-                tf.summary.scalar(
-                    "Generation sharpness loss metric",
-                    generation_sharpness_loss_metric.result(),
-                    step=epoch,
-                )
-                tf.summary.scalar(
-                    "Reconstruction sharpness loss metric",
-                    reconstruction_sharpness_loss_metric.result(),
-                    step=epoch,
+                generated_new = self.generate_and_save_images(
+                    epoch + 1,
+                    tf.random.normal(shape=[num_examples_to_generate, latent_dim]),
+                    generated_new_dir,
                 )
 
-                # Learning rates
-                tf.summary.scalar(
-                    "VAE learning rate",
-                    # autoencoder_optimizer.learning_rate,
-                    self.optimizer_.learning_rate(epoch * step),
-                    step=epoch,
+                # Show some examples of how the model reconstructs its inputs.
+                train_reconstructed = self.show_reproduction_quality(
+                    epoch + 1,
+                    train_test_images,
+                    reproductions_dir,
+                )
+                val_reconstructed = self.show_reproduction_quality(
+                    epoch + 1,
+                    val_test_images,
+                    val_reproductions_dir,
                 )
 
-                # MSE reconstruction losses
-                tf.summary.scalar("MSE train loss", train_loss, step=epoch)
-                tf.summary.scalar("MSE validation loss", val_loss, step=epoch)
+                # Compute reconstruction loss on training and validation data
+                train_loss, val_loss = self.compute_mse_losses(
+                    train_test_image_batch,
+                    val_test_image_batch,
+                )
 
-                # Example outputs
-                tf.summary.image(
-                    "reconstructed train images", train_reconstructed, step=epoch
-                )
-                tf.summary.image(
-                    "reconstructed val images", val_reconstructed, step=epoch
-                )
-                tf.summary.image(
-                    "generated images (same seed)", generated_same, step=epoch
-                )
-                tf.summary.image(
-                    "generated images (new seed)", generated_new, step=epoch
-                )
+                # Write to logs
+                with summary_writer.as_default():
+
+                    # Losses
+                    tf.summary.scalar(
+                        "VAE loss metric", vae_loss_metric.result(), step=epoch
+                    )
+                    tf.summary.scalar(
+                        "KL loss metric", kl_loss_metric.result(), step=epoch
+                    )
+                    tf.summary.scalar(
+                        "Generation sharpness loss metric",
+                        generation_sharpness_loss_metric.result(),
+                        step=epoch,
+                    )
+                    tf.summary.scalar(
+                        "Reconstruction sharpness loss metric",
+                        reconstruction_sharpness_loss_metric.result(),
+                        step=epoch,
+                    )
+
+                    # Learning rates
+                    tf.summary.scalar(
+                        "VAE learning rate",
+                        # autoencoder_optimizer.learning_rate,
+                        self.optimizer_.learning_rate(epoch * step),
+                        step=epoch,
+                    )
+
+                    # MSE reconstruction losses
+                    tf.summary.scalar("MSE train loss", train_loss, step=epoch)
+                    tf.summary.scalar("MSE validation loss", val_loss, step=epoch)
+
+                    # Example outputs
+                    crop_size = 256
+                    tf.summary.image(
+                        "reconstructed train images",
+                        train_reconstructed[:crop_size, :crop_size, :],
+                        step=epoch,
+                    )
+                    tf.summary.image(
+                        "reconstructed val images",
+                        val_reconstructed[:crop_size, :crop_size, :],
+                        step=epoch,
+                    )
+                    tf.summary.image(
+                        "generated images (same seed)",
+                        generated_same[:crop_size, :crop_size, :],
+                        step=epoch,
+                    )
+                    tf.summary.image(
+                        "generated images (new seed)",
+                        generated_new[:crop_size, :crop_size, :],
+                        step=epoch,
+                    )
 
             # Save the model every 2 epochs
             if (epoch + 1) % save_frequency == 0:

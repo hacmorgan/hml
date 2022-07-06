@@ -10,7 +10,7 @@ License: BSD
 """
 
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import argparse
 import datetime
@@ -171,7 +171,7 @@ def get_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def parse_kwargs(kwargs: List[str]) -> Dict[str, Any]:
+def parse_kwargs(kwargs: Optional[List[str]]) -> Dict[str, Any]:
     """
     Parse kwargs given as "=" separated key value pairs in command line args
 
@@ -181,10 +181,11 @@ def parse_kwargs(kwargs: List[str]) -> Dict[str, Any]:
     Returns:
         Kwargs as dict, ready to be e.g. unpacked into function args
     """
-    return {
-        name: value
-        for name, value in map(lambda kwarg: kwarg.strip().split("="), kwargs)
-    }
+    return (
+        dict(map(lambda kwarg: kwarg.strip().split("="), kwargs))
+        if kwargs is not None
+        else {}
+    )
 
 
 if __name__ == "__main__":
