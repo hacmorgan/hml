@@ -9,7 +9,7 @@ Train a VAE
 __author__ = "Hamish Morgan"
 
 
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import argparse
 import datetime
@@ -303,13 +303,15 @@ class Model(tf.keras.models.Model):
         """
         Generate and save images
         """
-        predictions = self.net.decoder_(test_input)
+        predictions = (
+            np.array((self.net.decoder_(test_input)[0, :, :, :] * 255.0))
+            .astype(np.uint8)
+            .reshape(self.input_shape_)
+        )
         output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
         cv2.imwrite(
             output_path,
-            cv2.cvtColor(
-                predictions.numpy().reshape(self.input_shape_), cv2.COLOR_BGR2RGB
-            ),
+            cv2.cvtColor(predictions, cv2.COLOR_RGB2BGR),
         )
         return predictions
 
@@ -322,7 +324,12 @@ class Model(tf.keras.models.Model):
         """
         Generate and save images
         """
-        _, reproductions = self(test_images)
+        _, reproductions = self(test_images, training=False)
+        reproductions = (
+            np.array((reproductions[0, :, :, :] * 255.0))
+            .astype(np.uint8)
+            .reshape(self.input_shape_)
+        )
         stacked = tf.concat([test_images, reproductions], axis=1)
         output_path = os.path.join(
             reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
@@ -600,22 +607,22 @@ class Model(tf.keras.models.Model):
                     crop_size = 256
                     tf.summary.image(
                         "reconstructed train images",
-                        train_reconstructed[:crop_size, :crop_size, :],
+                        train_reconstructed[0, :crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "reconstructed val images",
-                        val_reconstructed[:crop_size, :crop_size, :],
+                        val_reconstructed[0, :crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "generated images (same seed)",
-                        generated_same[:crop_size, :crop_size, :],
+                        generated_same[0, :crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "generated images (new seed)",
-                        generated_new[:crop_size, :crop_size, :],
+                        generated_new[0, :crop_size, :crop_size, :],
                         step=epoch,
                     )
 
@@ -640,47 +647,61 @@ class Model(tf.keras.models.Model):
         latent_dim: int = 50,
         save_output: bool = False,
         num_generations: Optional[int] = None,
-        sample: bool = True,
-        flood_shape: Optional[Tuple[int, int]] = None,
+        postproc_func: Optional[Callable] = None,
     ) -> None:
         """
         Generate some pixel art
 
         Args:
             generator: Generator model
-            generator_input: Path to a 10x10 grayscale image to use as input. Random noise
-                            used if not given.
+            generator_input: Path to a 10x10 grayscale image to use as input. Random
+                noise used if not given.
             save_output: Save images instead of displaying
-            sample: Apply sigmoid to decoder output if true, return logits othverwise
-            flood_shape: If given, flood generate an image of given shape (in blocks)
-                        instead of generating a single block from noise.
+            postproc_func: Postprocessing function to apply to raw output from network
+                before viewing/saving
         """
+        # Read input from file or generate randomly
         if decoder_input is not None:
             input_raw = tf.io.read_file(decoder_input)
             input_decoded = tf.image.decode_image(input_raw)
             latent_input = tf.reshape(input_decoded, [200, latent_dim])
         else:
             latent_input = tf.random.normal([1, latent_dim])
+
         i = 0
         while True:
+
+            # Run latent input through decoder
             output = autoencoder.net.decoder_(latent_input)
+
+            # Convert from float [0, 1] to unsigned int [0, 255]
             generated_rgb_image = np.array((output[0, :, :, :] * 255.0)).astype(
                 np.uint8
             )
-            # generated_rgb_image = cv2.cvtColor(generated_hsv_image, cv2.COLOR_HSV2RGB)
+
+            # Optionally apply postprocessing
+            if postproc_func is not None:
+                generated_rgb_image = postproc_func(generated_rgb_image)
+
+            # Save generated image if desired
             if save_output:
                 save_name = f"generated_{i}.png"
                 cv2.imwrite(
                     save_name, cv2.cvtColor(generated_rgb_image, cv2.COLOR_BGR2RGB)
                 )
                 print(f"image generated to: generated_{i}.png")
+
+                # Only generate as many images as desired
                 i += 1
+                if num_generations is not None and i >= num_generations:
+                    break
+
+            # Otherwise display using matplotlib
             else:
                 plt.close("all")
                 plt.imshow(generated_rgb_image)
                 plt.axis("off")
                 plt.show()
-            if num_generations is not None and i >= num_generations:
-                break
-            input("press enter to generate another image")
+
+            # Generate a new latent input
             latent_input = tf.random.normal([1, latent_dim])
