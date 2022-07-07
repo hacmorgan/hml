@@ -59,7 +59,7 @@ def collage_vae_contrast_sharpen(image: np.ndarray) -> np.ndarray:
     """
     Standard routine for CollageVAE postprocessing
     """
-    return sharpness(image=contrast(image=image, factor=2), factor=2)
+    return sharpness(image=contrast(image=image, factor=2.5), factor=2.5)
 
 
 class Model(tf.keras.models.Model):
