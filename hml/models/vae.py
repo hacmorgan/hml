@@ -22,6 +22,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import PIL.Image
+import PIL.ImageEnhance
 
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -33,7 +34,7 @@ from hml.data_pipelines.unsupervised.upscale_collage import UpscaleDataset
 
 from hml.util.git import modified_files_in_git_repo, write_commit_hash_to_model_dir
 from hml.util.learning_rate import WingRampLRS
-from hml.util.image import variance_of_laplacian
+from hml.util.image import variance_of_laplacian, contrast, sharpness
 
 
 MODES_OF_OPERATION = ("train", "generate", "discriminate", "view-latent-space")
@@ -52,6 +53,13 @@ Total autoencoder loss:             {vae_loss:>6.4f}
 # This method returns a helper function to compute mean squared error loss
 mse = tf.keras.losses.MeanSquaredError()
 bce = tf.keras.losses.BinaryCrossentropy()
+
+
+def collage_vae_contrast_sharpen(image: np.ndarray) -> np.ndarray:
+    """
+    Standard routine for CollageVAE postprocessing
+    """
+    return sharpness(image=contrast(image=image, factor=2), factor=2)
 
 
 class Model(tf.keras.models.Model):
@@ -642,12 +650,12 @@ class Model(tf.keras.models.Model):
             # tf.keras.backend.clear_session()
 
     def generate(
-        autoencoder: tf.keras.models.Model,
+        self,
         decoder_input: Optional[str] = None,
-        latent_dim: int = 50,
+        latent_dim: int = 256,
         save_output: bool = False,
         num_generations: Optional[int] = None,
-        postproc_func: Optional[Callable] = None,
+        postproc_func: Optional[Callable] = collage_vae_contrast_sharpen,
     ) -> None:
         """
         Generate some pixel art
@@ -672,7 +680,7 @@ class Model(tf.keras.models.Model):
         while True:
 
             # Run latent input through decoder
-            output = autoencoder.net.decoder_(latent_input)
+            output = self.net.decoder_(latent_input)
 
             # Convert from float [0, 1] to unsigned int [0, 255]
             generated_rgb_image = np.array((output[0, :, :, :] * 255.0)).astype(

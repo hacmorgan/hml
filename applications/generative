@@ -54,7 +54,7 @@ def main(args: argparse.Namespace) -> int:
         )
     elif args.mode == "generate":
         model.generate(
-            save_output=args.save_generator_output,
+            save_output=args.save_output,
             num_generations=args.num_generations,
         )
     else:
@@ -86,6 +86,7 @@ def get_args() -> argparse.Namespace:
         "--model-class",
         "-m",
         type=str,
+        required=True,
         help="Generative model to use. `Model` class is imported from hml.models.<model_class>",
     )
 
@@ -146,6 +147,13 @@ def get_args() -> argparse.Namespace:
         "generate",
         help="Generate images using a trained model",
         formatter_class=formatter,
+    )
+    generate_parser.add_argument(
+        "--constructor-kwargs",
+        "-k",
+        type=str,
+        nargs="*",
+        help="Additional arguments to supply to model constructor",
     )
     generate_parser.add_argument(
         "--generator-input",
