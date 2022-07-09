@@ -15,6 +15,7 @@ import argparse
 import datetime
 import os
 import random
+import shutil
 import sys
 import time
 
@@ -33,7 +34,9 @@ from hml.data_pipelines.utils import (
     load_image,
     normalise,
     normalise_tanh,
+    save_image,
 )
+from hml.util.timestamp import iso_condensed
 
 
 class UpscaleDataset:
@@ -48,6 +51,7 @@ class UpscaleDataset:
         num_examples: int,
         flip_probability: float = 0.5,
         crop_fom_source_images: bool = True,
+        save_dir: Optional[str] = None,
     ) -> "UpscaleDataset":
         """
         Construct the data generator.
@@ -59,14 +63,23 @@ class UpscaleDataset:
             flip_probability: Probability of flipping last image vertically/horizontally
             crop_fom_source_images: Randomly crop source images before collaging if True,
                 collage full-size images otherwise
+            save_dir: If given, save images under this directory to facilitate resuming
+                training later with exactly the same images (see also: resume)
         """
         self.dataset_path_ = dataset_path
         self.output_shape_ = output_shape
         self.num_examples_ = num_examples
         self.flip_prob_ = flip_probability
         self.crop_from_source_images_ = crop_fom_source_images
+        self.save_dir_ = save_dir
         self.dataset_ = []
         self.have_seen_full_dataset_ = False
+        self.first_pass_ = True
+
+        if self.save_dir_ is not None:
+            if os.path.exists(save_dir):
+                shutil.rmtree(save_dir)
+            os.makedirs(self.save_dir_)
 
     def __call__(self) -> Iterator[np.ndarray]:
         """
@@ -99,6 +112,12 @@ class UpscaleDataset:
             if random.random() < self.flip_prob_:
                 new_image = np.fliplr(new_image)
             yield new_image
+            if self.first_pass_:
+                save_image(
+                    image=(new_image * 255).astype(np.uint8),
+                    save_path=os.path.join(self.save_dir_, iso_condensed()) + ".png",
+                )
+        self.first_pass_ = False
 
     def full_dataset(self) -> Iterator[np.ndarray]:
         """

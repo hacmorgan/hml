@@ -31,6 +31,7 @@ import tensorflow_addons as tfa
 from hml.architectures.convolutional.autoencoders.vae import VariationalAutoEncoder
 
 from hml.data_pipelines.unsupervised.upscale_collage import UpscaleDataset
+from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
 
 from hml.util.git import modified_files_in_git_repo, write_commit_hash_to_model_dir
 from hml.util.learning_rate import WingRampLRS
@@ -73,9 +74,10 @@ class Model(tf.keras.models.Model):
     def __init__(
         self,
         latent_dim: int = 256,
-        # input_shape: Tuple[int, int, int] = (1152, 2048, 3),
-        input_shape: Tuple[int, int, int] = (2187, 3888, 3),  # stride 3
+        input_shape: Tuple[int, int, int] = (1152, 2048, 3),
+        # input_shape: Tuple[int, int, int] = (2187, 3888, 3),  # stride 3
         conv_filters: int = 128,
+        strides: int = 2,
         checkpoint: Optional[str] = None,
         save_frequency: int = 50,
     ) -> "Model":
@@ -91,11 +93,13 @@ class Model(tf.keras.models.Model):
         # High level parameters
         self.latent_dim_ = latent_dim
         self.input_shape_ = input_shape
+        self.conv_filters_ = conv_filters
+        self.strides_ = strides
         self.net = VariationalAutoEncoder(
             latent_dim=self.latent_dim_,
             input_shape=self.input_shape_,
-            conv_filters=conv_filters,
-            strides=3,
+            conv_filters=self.conv_filters_,
+            strides=self.strides_,
         )
         self.steps_per_epoch_ = 50
         self.checkpoint_path_ = checkpoint
@@ -103,27 +107,6 @@ class Model(tf.keras.models.Model):
             "encoder_": self.net.encoder_,
             "decoder_": self.net.decoder_,
         }
-
-        # # Networks
-        # # self.generator_ = Generator(
-        # #     latent_dim=latent_dim, conv_filters=self.conv_filters_
-        # # )
-        # self.generator_ = generator(
-        #     output_shape=self.input_shape_,
-        #     latent_dim=self.latent_dim_,
-        #     conv_filters=self.conv_filters_,
-        #     latent_shape=LATENT_SHAPE_WIDE,
-        #     strides=3,
-        # )
-        # # self.discriminator_ = Discriminator(
-        # #     input_shape=input_shape, conv_filters=self.conv_filters_
-        # # )
-        # self.discriminator_ = discriminator(
-        #     input_shape=self.input_shape_,
-        #     conv_filters=self.conv_filters_,
-        #     latent_shape=LATENT_SHAPE_WIDE,
-        #     strides=3,
-        # )
 
         # Configure learning rate
         self.lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
@@ -134,9 +117,6 @@ class Model(tf.keras.models.Model):
 
         # Configure optimiser
         self.optimizer_ = tf.keras.optimizers.Adam(learning_rate=self.lr_)
-
-        # # Compile model
-        # self.custom_compile(optimizer=self.optimizer_)
 
         # Set up checkpoints
         self.checkpoint_ = tf.train.Checkpoint(
@@ -311,15 +291,18 @@ class Model(tf.keras.models.Model):
         """
         Generate and save images
         """
-        predictions = (
-            np.array((self.net.decoder_(test_input)[0, :, :, :] * 255.0))
-            .astype(np.uint8)
-            .reshape(self.input_shape_)
-        )
+        predictions = self.net.decoder_(test_input)
         output_path = os.path.join(progress_dir, f"image_at_epoch_{epoch:04d}.png")
         cv2.imwrite(
             output_path,
-            cv2.cvtColor(predictions, cv2.COLOR_RGB2BGR),
+            cv2.cvtColor(
+                (
+                    np.array((predictions[0, :, :, :] * 255.0))
+                    .astype(np.uint8)
+                    .reshape(self.input_shape_)
+                ),
+                cv2.COLOR_RGB2BGR,
+            ),
         )
         return predictions
 
@@ -333,11 +316,11 @@ class Model(tf.keras.models.Model):
         Generate and save images
         """
         _, reproductions = self(test_images, training=False)
-        reproductions = (
-            np.array((reproductions[0, :, :, :] * 255.0))
-            .astype(np.uint8)
-            .reshape(self.input_shape_)
-        )
+        # reproductions = (
+        #     np.array((reproductions * 255.0))
+        #     .astype(np.uint8)
+        #     .reshape(self.input_shape_)
+        # )
         stacked = tf.concat([test_images, reproductions], axis=1)
         output_path = os.path.join(
             reproductions_dir, f"reproductions_at_epoch_{epoch:04d}.png"
@@ -345,9 +328,9 @@ class Model(tf.keras.models.Model):
         cv2.imwrite(
             output_path,
             cv2.cvtColor(
-                stacked.numpy().reshape(
-                    (self.input_shape_[0] * 2,) + self.input_shape_[1:]
-                ),
+                np.array(stacked[0] * 255)
+                .astype(np.uint8)
+                .reshape((self.input_shape_[0] * 2,) + self.input_shape_[1:]),
                 cv2.COLOR_BGR2RGB,
             ),
         )
@@ -378,8 +361,6 @@ class Model(tf.keras.models.Model):
         train_path: str,
         val_path: str,
         epochs: int = 100,
-        # output_shape: Tuple[int, int, int] = (1152, 2048, 3),
-        output_shape: Tuple[int, int, int] = (2187, 3888, 3),  # stride 3
         batch_size: int = 1,
         latent_dim: int = 256,
         num_examples_to_generate: int = 1,
@@ -428,17 +409,27 @@ class Model(tf.keras.models.Model):
             write_commit_hash_to_model_dir(model_dir)
 
         # Shape of 3x3 blocks context region
-        rows, cols, channels = output_shape
+        rows, cols, channels = self.input_shape_
 
         # Pixel Art dataset
+        if self.checkpoint_path_ is None:
+            train_gen = UpscaleDataset(
+                dataset_path=train_path,
+                output_shape=self.input_shape_,
+                num_examples=self.steps_per_epoch_,
+                save_dir=os.path.join(model_dir, "train_images"),
+            )
+        else:
+            train_gen = ResizeDataset(
+                dataset_path=train_path, output_shape=self.input_shape_
+            )
+
         train_images = (
             tf.data.Dataset.from_generator(
-                UpscaleDataset(
-                    dataset_path=train_path,
-                    output_shape=output_shape,
-                    num_examples=self.steps_per_epoch_,
+                train_gen,
+                output_signature=tf.TensorSpec(
+                    shape=self.input_shape_, dtype=tf.float32
                 ),
-                output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
             )
             .batch(batch_size)
             .cache()
@@ -448,9 +439,13 @@ class Model(tf.keras.models.Model):
         val_images = (
             tf.data.Dataset.from_generator(
                 UpscaleDataset(
-                    dataset_path=val_path, output_shape=output_shape, num_examples=1
+                    dataset_path=val_path,
+                    output_shape=self.input_shape_,
+                    num_examples=1,
                 ),
-                output_signature=tf.TensorSpec(shape=output_shape, dtype=tf.float32),
+                output_signature=tf.TensorSpec(
+                    shape=self.input_shape_, dtype=tf.float32
+                ),
             )
             .batch(batch_size)
             .cache()
@@ -615,22 +610,22 @@ class Model(tf.keras.models.Model):
                     crop_size = 256
                     tf.summary.image(
                         "reconstructed train images",
-                        train_reconstructed[0, :crop_size, :crop_size, :],
+                        train_reconstructed[:crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "reconstructed val images",
-                        val_reconstructed[0, :crop_size, :crop_size, :],
+                        val_reconstructed[:crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "generated images (same seed)",
-                        generated_same[0, :crop_size, :crop_size, :],
+                        generated_same[:crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "generated images (new seed)",
-                        generated_new[0, :crop_size, :crop_size, :],
+                        generated_new[:crop_size, :crop_size, :],
                         step=epoch,
                     )
 

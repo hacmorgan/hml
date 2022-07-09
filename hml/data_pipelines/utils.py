@@ -52,6 +52,13 @@ def load_image(image_path: str) -> Optional[np.ndarray]:
     return image_np
 
 
+def save_image(image: np.ndarray, save_path: str) -> None:
+    """
+    Save an image to disk
+    """
+    PIL.Image.fromarray(image).save(save_path)
+
+
 def walk_using_scandir(path: str, shuffle: bool = True) -> Iterator[os.DirEntry]:
     """
     Find all files under a top-level path using os.scandir recursively
