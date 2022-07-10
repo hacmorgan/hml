@@ -9,8 +9,10 @@ License: BSD
 
 from typing import Tuple
 
+import functools
 import sys
 
+import numpy as np
 import tensorflow as tf
 
 from tensorflow.keras import layers
@@ -34,43 +36,43 @@ def generator(
     conv_filters: int = 128,
     latent_shape: Tuple[int, int] = LATENT_SHAPE_WIDE,
     strides: int = 2,
+    repeat_layers: int = 0,
 ) -> tf.keras.models.Model:
     """
     Convolutional generator
 
     Adds fractionally strided convolutions until the desired output size is met
     """
+    # Predefine blocks
     kernel_initializer = tf.keras.initializers.RandomNormal(stddev=0.02)
-
-    # Start with input and dense layers
-    network_layers = [
-        layers.InputLayer(input_shape=latent_dim),
-        *dense_block(
-            neurons=(latent_shape[0] * latent_shape[1] * conv_filters),
-            kernel_initializer=kernel_initializer,
-            bias=False,
-            batch_norm=False,
-            drop_prob=0,
-        ),
-        layers.Reshape(latent_shape + (conv_filters,)),
-    ]
-    shape = list(latent_shape)
-
-    # Add fractionally strided convs until output feature map is half the size of output
-    while shape[0] < output_shape[0] / strides and shape[1] < output_shape[1] / strides:
-        network_layers += deconv_2d_block(
-            filters=conv_filters,
-            kernel_initializer=kernel_initializer,
-            bias=False,
-            batch_norm=False,
-            drop_prob=0,
-            strides=strides,
-        )
-        shape[0] *= strides
-        shape[1] *= strides
-
-    # Add output layer
-    network_layers += deconv_2d_block(
+    dense_block_ = functools.partial(
+        dense_block,
+        neurons=(latent_shape[0] * latent_shape[1] * conv_filters),
+        kernel_initializer=kernel_initializer,
+        bias=False,
+        batch_norm=False,
+        drop_prob=0,
+    )
+    upscale_block_ = functools.partial(
+        deconv_2d_block,
+        filters=conv_filters,
+        kernel_initializer=kernel_initializer,
+        bias=False,
+        batch_norm=False,
+        drop_prob=0,
+        strides=strides,
+    )
+    deepen_block_ = functools.partial(
+        deconv_2d_block,
+        filters=conv_filters,
+        kernel_initializer=kernel_initializer,
+        bias=False,
+        batch_norm=False,
+        drop_prob=0,
+        strides=strides,
+    )
+    output_block_ = functools.partial(
+        deconv_2d_block,
         filters=3,
         activation=tf.nn.sigmoid,
         kernel_initializer=kernel_initializer,
@@ -79,8 +81,27 @@ def generator(
         drop_prob=0,
         strides=strides,
     )
-    shape[0] *= strides
-    shape[1] *= strides
+
+    # Start with input and dense layers
+    network_layers = [
+        layers.InputLayer(input_shape=latent_dim),
+        *dense_block_(),
+        layers.Reshape(latent_shape + (conv_filters,)),
+    ]
+    shape = np.array(latent_shape)
+
+    # Add fractionally strided convs until output feature map is half the size of output
+    while shape[0] < output_shape[0] / strides and shape[1] < output_shape[1] / strides:
+        network_layers += upscale_block_()
+        shape *= strides
+
+        # Optionally add more conv layers with no upscaling
+        for _ in range(repeat_layers):
+            network_layers += deepen_block_()
+
+    # Add output layer
+    network_layers += output_block_
+    shape *= strides
     if tuple(shape) != output_shape[:2]:
         print(
             f"Output shape not achievable, requested {output_shape}, achieved {shape}",

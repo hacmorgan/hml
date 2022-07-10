@@ -27,6 +27,7 @@ class VariationalAutoEncoder(tf.keras.layers.Layer):
         input_shape: Tuple[int, int, int] = (64, 64, 3),
         conv_filters: int = 128,
         strides: int = 2,
+        repeat_layers: int = 0,
     ) -> "VAE":
         """
         Construct the autoencoder
@@ -42,12 +43,14 @@ class VariationalAutoEncoder(tf.keras.layers.Layer):
             input_shape=input_shape,
             strides=strides,
             conv_filters=conv_filters,
+            repeat_layers=repeat_layers,
         )
         self.decoder_ = generator(
             latent_dim=self.latent_dim_,
             output_shape=input_shape,
             conv_filters=conv_filters,
             strides=strides,
+            repeat_layers=repeat_layers,
         )
         self.structure = ["encoder_", "decoder_"]
 

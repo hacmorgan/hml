@@ -34,7 +34,6 @@ from hml.data_pipelines.unsupervised.upscale_collage import UpscaleDataset
 from hml.data_pipelines.unsupervised.resize_images import ResizeDataset
 
 from hml.util.git import modified_files_in_git_repo, write_commit_hash_to_model_dir
-from hml.util.learning_rate import WingRampLRS
 from hml.util.image import variance_of_laplacian, contrast, sharpness
 
 
@@ -96,10 +95,11 @@ class Model(tf.keras.models.Model):
         self.conv_filters_ = conv_filters
         self.strides_ = strides
         self.net = VariationalAutoEncoder(
-            latent_dim=self.latent_dim_,
+            latent_dim=self.t_dim_,
             input_shape=self.input_shape_,
             conv_filters=self.conv_filters_,
             strides=self.strides_,
+            repeat_layers=1,
         )
         self.steps_per_epoch_ = 50
         self.checkpoint_path_ = checkpoint

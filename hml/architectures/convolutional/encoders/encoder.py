@@ -12,6 +12,7 @@ from typing import Tuple
 import functools
 import sys
 
+import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
@@ -42,6 +43,7 @@ class Encoder(tf.keras.layers.Layer):
         latent_shape: Tuple[int, int] = LATENT_SHAPE_WIDE,
         strides: int = 2,
         conv_filters: int = 128,
+        repeat_layers: int = 0,
     ) -> "Encoder":
         """
         Construct the encoder
@@ -62,7 +64,7 @@ class Encoder(tf.keras.layers.Layer):
         # Start with input layer
         self.input_ = layers.InputLayer(input_shape=input_shape)
         self.conv_layers_ = []
-        shape = list(input_shape[:2])
+        shape = np.array(input_shape[:2])
 
         # Add strided convs until output feature map is at desired latent shape
         while shape[0] > latent_shape[0] and shape[1] > latent_shape[1]:
@@ -77,8 +79,21 @@ class Encoder(tf.keras.layers.Layer):
                     strides=strides,
                 )
             )
-            shape[0] /= strides
-            shape[1] /= strides
+            shape /= strides
+
+            # Optionally add more conv layers with no upscaling
+            for _ in range(repeat_layers):
+                self.conv_layers_.append(
+                    Conv2dBlock(
+                        filters=conv_filters,
+                        kernel_size=5,
+                        activation=leaky_relu,
+                        kernel_initializer=kernel_initializer,
+                        batch_norm=False,
+                        regularise=0,
+                        strides=1,
+                    )
+                )
 
         # Verify latent shape
         if tuple(shape) != latent_shape[:2]:
