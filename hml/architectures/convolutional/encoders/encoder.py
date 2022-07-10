@@ -64,7 +64,7 @@ class Encoder(tf.keras.layers.Layer):
         # Start with input layer
         self.input_ = layers.InputLayer(input_shape=input_shape)
         self.conv_layers_ = []
-        shape = np.array(input_shape[:2])
+        shape = np.array(input_shape[:2], dtype=np.int64)
 
         # Add strided convs until output feature map is at desired latent shape
         while shape[0] > latent_shape[0] and shape[1] > latent_shape[1]:
@@ -79,7 +79,7 @@ class Encoder(tf.keras.layers.Layer):
                     strides=strides,
                 )
             )
-            shape /= strides
+            shape = (shape / strides).astype(int)
 
             # Optionally add more conv layers with no upscaling
             for _ in range(repeat_layers):

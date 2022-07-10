@@ -78,7 +78,7 @@ class Model(tf.keras.models.Model):
         conv_filters: int = 128,
         strides: int = 2,
         checkpoint: Optional[str] = None,
-        save_frequency: int = 50,
+        save_frequency: int = 200,
     ) -> "Model":
         """
         Construct the autoencoder
@@ -95,13 +95,13 @@ class Model(tf.keras.models.Model):
         self.conv_filters_ = conv_filters
         self.strides_ = strides
         self.net = VariationalAutoEncoder(
-            latent_dim=self.t_dim_,
+            latent_dim=self.latent_dim_,
             input_shape=self.input_shape_,
             conv_filters=self.conv_filters_,
             strides=self.strides_,
             repeat_layers=1,
         )
-        self.steps_per_epoch_ = 50
+        self.steps_per_epoch_ = 80
         self.checkpoint_path_ = checkpoint
         self.structure = {
             "encoder_": self.net.encoder_,
@@ -297,7 +297,7 @@ class Model(tf.keras.models.Model):
             output_path,
             cv2.cvtColor(
                 (
-                    np.array((predictions[0, :, :, :] * 255.0))
+                    np.array((predictions[0, ...] * 255.0))
                     .astype(np.uint8)
                     .reshape(self.input_shape_)
                 ),
@@ -610,22 +610,22 @@ class Model(tf.keras.models.Model):
                     crop_size = 256
                     tf.summary.image(
                         "reconstructed train images",
-                        train_reconstructed[:crop_size, :crop_size, :],
+                        train_reconstructed[:, :crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "reconstructed val images",
-                        val_reconstructed[:crop_size, :crop_size, :],
+                        val_reconstructed[:, :crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "generated images (same seed)",
-                        generated_same[:crop_size, :crop_size, :],
+                        generated_same[:, :crop_size, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "generated images (new seed)",
-                        generated_new[:crop_size, :crop_size, :],
+                        generated_new[:, :crop_size, :crop_size, :],
                         step=epoch,
                     )
 

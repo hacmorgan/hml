@@ -69,7 +69,7 @@ def generator(
         bias=False,
         batch_norm=False,
         drop_prob=0,
-        strides=strides,
+        strides=1,
     )
     output_block_ = functools.partial(
         deconv_2d_block,
@@ -88,7 +88,7 @@ def generator(
         *dense_block_(),
         layers.Reshape(latent_shape + (conv_filters,)),
     ]
-    shape = np.array(latent_shape)
+    shape = np.array(latent_shape, dtype=np.int64)
 
     # Add fractionally strided convs until output feature map is half the size of output
     while shape[0] < output_shape[0] / strides and shape[1] < output_shape[1] / strides:
@@ -100,7 +100,7 @@ def generator(
             network_layers += deepen_block_()
 
     # Add output layer
-    network_layers += output_block_
+    network_layers += output_block_()
     shape *= strides
     if tuple(shape) != output_shape[:2]:
         print(
