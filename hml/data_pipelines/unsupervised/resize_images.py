@@ -113,12 +113,13 @@ class ResizeDataset:
                 image_np = np.array(image.convert("RGB"))
             if image_np.shape[2] > 3:
                 image_np = image_np[:, :, :3]
-            image_resized = cv2.resize(
-                image_np, dsize=self.output_shape_[:-1], interpolation=cv2.INTER_AREA
-            )
+            # image_resized = cv2.resize(
+            #     image_np, dsize=self.output_shape_[:-1], interpolation=cv2.INTER_AREA
+            # )
+            image_resized = image_np
             # yield from map(normalise, permute_flips(image_crop))
-            yield from map(normalise, permute_flips(image_resized, flip_y=False))
-            # yield normalise(image_crop)
+            # yield from map(normalise, permute_flips(image_resized, flip_y=False))
+            yield normalise(image_resized)
 
     def find_training_images(self) -> Iterable[str]:
         """

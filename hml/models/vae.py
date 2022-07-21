@@ -108,6 +108,14 @@ class Model(tf.keras.models.Model):
             "decoder_": self.net.decoder_,
         }
 
+        # Construct posterior distribution to sample from for new images
+        self.loc_ = 0
+        self.scale_diag_ = 3
+        self.distribution_ = tfp.distributions.MultivariateNormalDiag(
+            loc=tf.zeros([1, self.latent_dim_]) + self.loc_,
+            scale_diag=tf.ones([1, self.latent_dim_]) * self.scale_diag_,
+        )
+
         # Configure learning rate
         self.lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
             initial_learning_rate=3e-5,
@@ -226,13 +234,13 @@ class Model(tf.keras.models.Model):
             + variance_of_laplacian(reconstructions, ksize=7)
         )
 
-        # Compute total loss and return
+        # Compute total loss
         loss = (
             beta * kl_loss
             + delta * sharpness_loss_generated
             + epsilon * sharpness_loss_reconstructed
         )
-        # loss = kl_loss
+
         return (
             loss,
             kl_loss,
@@ -499,7 +507,7 @@ class Model(tf.keras.models.Model):
 
         # Use the same seed throughout training, to see what the model does with the same
         # input as it trains.
-        seed = tf.random.normal(shape=[num_examples_to_generate, latent_dim])
+        seed = self.distribution_.sample()
 
         # Save training data from first step
         first_step = True
@@ -551,7 +559,7 @@ class Model(tf.keras.models.Model):
                 )
                 generated_new = self.generate_and_save_images(
                     epoch + 1,
-                    tf.random.normal(shape=[num_examples_to_generate, latent_dim]),
+                    self.distribution_.sample(),
                     generated_new_dir,
                 )
 
@@ -610,12 +618,12 @@ class Model(tf.keras.models.Model):
                     crop_size = 256
                     tf.summary.image(
                         "reconstructed train images",
-                        train_reconstructed[:, :crop_size, :crop_size, :],
+                        train_reconstructed[:, :, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
                         "reconstructed val images",
-                        val_reconstructed[:, :crop_size, :crop_size, :],
+                        val_reconstructed[:, :, :crop_size, :],
                         step=epoch,
                     )
                     tf.summary.image(
@@ -668,11 +676,13 @@ class Model(tf.keras.models.Model):
             input_raw = tf.io.read_file(decoder_input)
             input_decoded = tf.image.decode_image(input_raw)
             latent_input = tf.reshape(input_decoded, [200, latent_dim])
-        else:
-            latent_input = tf.random.normal([1, latent_dim])
 
         i = 0
         while True:
+
+            # Generate a new latent input
+            if decoder_input is None:
+                latent_input = self.distribution_.sample()
 
             # Run latent input through decoder
             output = self.net.decoder_(latent_input)
@@ -705,6 +715,3 @@ class Model(tf.keras.models.Model):
                 plt.imshow(generated_rgb_image)
                 plt.axis("off")
                 plt.show()
-
-            # Generate a new latent input
-            latent_input = tf.random.normal([1, latent_dim])
