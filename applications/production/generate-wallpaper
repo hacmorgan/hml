@@ -35,7 +35,7 @@ function checkout_and_reinstall
 {
     (
         cd "$HML" || exit 1
-        git switch -
+        git checkout -
         git pull
         git checkout "$(cat "$MODEL_DIR/commit-hash")"
         source "$HML/hml-env/bin/activate"
