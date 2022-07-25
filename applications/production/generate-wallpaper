@@ -64,7 +64,7 @@ function generate_one_image
             --checkpoint "$CHECKPOINT_DIR/$(latest_checkpoint)"
             generate \
             --num-generations 1 \
-            --save-output \
+            --save-output
     )
 }
 
