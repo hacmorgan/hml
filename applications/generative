@@ -36,7 +36,7 @@ def main(args: argparse.Namespace) -> int:
     model_module = importlib.import_module(f"hml.models.{args.model_class}")
     model = model_module.Model(
         checkpoint=args.checkpoint,
-        **parse_kwargs(kwargs=args.constructor_kwargs),
+        # **parse_kwargs(kwargs=args.constructor_kwargs),
     )
     try:
         model.custom_compile()
@@ -109,6 +109,7 @@ def get_args() -> argparse.Namespace:
         "-k",
         type=str,
         nargs="*",
+        default=[],
         help="Additional arguments to supply to model constructor",
     )
     train_parser.add_argument(
@@ -153,6 +154,7 @@ def get_args() -> argparse.Namespace:
         "-k",
         type=str,
         nargs="*",
+        default=[],
         help="Additional arguments to supply to model constructor",
     )
     generate_parser.add_argument(
