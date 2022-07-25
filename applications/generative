@@ -36,7 +36,7 @@ def main(args: argparse.Namespace) -> int:
     model_module = importlib.import_module(f"hml.models.{args.model_class}")
     model = model_module.Model(
         checkpoint=args.checkpoint,
-        **parse_kwargs(kwargs=args.constructor_kwargs),
+        # **parse_kwargs(kwargs=args.constructor_kwargs),
     )
     try:
         model.custom_compile()
