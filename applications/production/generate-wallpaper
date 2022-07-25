@@ -35,7 +35,7 @@ function checkout_and_reinstall
 {
     (
         cd "$HML" || exit 1
-        git checkout master
+        git checkout main
         git pull
         git checkout "$(cat "$MODEL_DIR/commit-hash")"
         source "$HML/hml-env/bin/activate"
@@ -48,7 +48,7 @@ function checkout_master
 {
     (
         cd "$HML" || exit 1
-        git checkout master
+        git checkout main
         source "$HML/hml-env/bin/activate"
         python3 -m pip install --upgrade --editable .
     )
