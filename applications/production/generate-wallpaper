@@ -93,5 +93,6 @@ if [[ -n "$local" ]]; then
 else
     ssh $GEORGE "source $HML/hml-env/bin/activate && generate-wallpaper local"
     save_path="$HOME/Desktop/ai-wallpapers/new-wallpaper-$(iso_date).png"
+    mkdir -pv "$(dirname "$save_path")"
     scp -v $GEORGE:/tmp/generated_0.png "$save_path"
 fi
