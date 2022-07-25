@@ -104,14 +104,14 @@ def get_args() -> argparse.Namespace:
         default="/mnt/storage/ml/data/pixel-art/train",
         help="Path to training dataset directory",
     )
-    train_parser.add_argument(
-        "--constructor-kwargs",
-        "-k",
-        type=str,
-        nargs="*",
-        default=[],
-        help="Additional arguments to supply to model constructor",
-    )
+    # train_parser.add_argument(
+    #     "--constructor-kwargs",
+    #     "-k",
+    #     type=str,
+    #     nargs="*",
+    #     default=[],
+    #     help="Additional arguments to supply to model constructor",
+    # )
     train_parser.add_argument(
         "--debug",
         "-d",
@@ -149,14 +149,14 @@ def get_args() -> argparse.Namespace:
         help="Generate images using a trained model",
         formatter_class=formatter,
     )
-    generate_parser.add_argument(
-        "--constructor-kwargs",
-        "-k",
-        type=str,
-        nargs="*",
-        default=[],
-        help="Additional arguments to supply to model constructor",
-    )
+    # generate_parser.add_argument(
+    #     "--constructor-kwargs",
+    #     "-k",
+    #     type=str,
+    #     nargs="*",
+    #     default=[],
+    #     help="Additional arguments to supply to model constructor",
+    # )
     generate_parser.add_argument(
         "--generator-input",
         "-g",
