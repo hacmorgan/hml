@@ -35,6 +35,7 @@ function checkout_and_reinstall
 {
     (
         cd "$HML" || exit 1
+        git switch -
         git pull
         git checkout "$(cat "$MODEL_DIR/commit-hash")"
         source "$HML/hml-env/bin/activate"
@@ -61,7 +62,7 @@ function generate_one_image
         source "$HML/hml-env/bin/activate"
         generative \
             --model-class vae \
-            --checkpoint "$CHECKPOINT_DIR/$(latest_checkpoint)"
+            --checkpoint "$CHECKPOINT_DIR/$(latest_checkpoint)" \
             generate \
             --num-generations 1 \
             --save-output
