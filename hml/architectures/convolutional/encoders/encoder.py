@@ -44,6 +44,7 @@ class Encoder(tf.keras.layers.Layer):
         strides: int = 2,
         conv_filters: int = 128,
         repeat_layers: int = 0,
+        conv_type: str = "standard",
     ) -> "Encoder":
         """
         Construct the encoder
@@ -77,6 +78,7 @@ class Encoder(tf.keras.layers.Layer):
                     batch_norm=False,
                     regularise=0,
                     strides=strides,
+                    conv_type=conv_type,
                 )
             )
             shape = (shape / strides).astype(int)
@@ -92,6 +94,7 @@ class Encoder(tf.keras.layers.Layer):
                         batch_norm=False,
                         regularise=0,
                         strides=1,
+                        conv_type=conv_type,
                     )
                 )
 

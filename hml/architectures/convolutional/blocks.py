@@ -114,6 +114,7 @@ class Conv2dBlock(tf.keras.layers.Layer):
         ] = "glorot_uniform",
         activation=tf.nn.relu,
         batch_norm=True,
+        conv_type: str = "standard",
     ):
         super().__init__()
         self.filters = filters
@@ -123,26 +124,31 @@ class Conv2dBlock(tf.keras.layers.Layer):
         self.activation = activation
         self.batch_norm = batch_norm
 
-        if regularise == 0:
-            self.conv = tf.keras.layers.Conv2D(
-                filters,
-                kernel_size,
-                strides=strides,
-                padding=padding,
-                activation=None,
-                kernel_initializer=kernel_initializer,
+        args = {
+            "filters": filters,
+            "kernel_size": kernel_size,
+            "strides": strides,
+            "padding": padding,
+            "activation": None,
+            "kernel_initializer": kernel_initializer,
+        }
+        if regularise != 0:
+            args.update(
+                {
+                    "kernel_regularizer": tf.keras.regularizers.L1(regularise),
+                    "activity_regularizer": tf.keras.regularizers.L2(regularise),
+                    "kernel_initializer": kernel_initializer,
+                }
             )
+
+        if conv_type == "standard":
+            self.conv = tf.keras.layers.Conv2D(**args)
+
+        elif conv_type == "separable":
+            self.conv = tf.keras.layers.SeparableConvolution2D(**args)
+
         else:
-            self.conv = tf.keras.layers.Conv2D(
-                filters,
-                kernel_size,
-                strides=strides,
-                padding=padding,
-                activation=None,
-                kernel_regularizer=tf.keras.regularizers.L1(regularise),
-                activity_regularizer=tf.keras.regularizers.L2(regularise),
-                kernel_initializer=kernel_initializer,
-            )
+            raise ValueError(f"Unknown {conv_type=}")
 
         self.drop = tf.keras.layers.Dropout(drop_prob)
         self.bn = tf.keras.layers.BatchNormalization()
