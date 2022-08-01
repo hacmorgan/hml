@@ -53,5 +53,6 @@ def write_commit_hash_to_model_dir(model_dir: str) -> None:
         stdout=subprocess.PIPE,
     )
     commit_hash = result.stdout.decode("utf-8").strip()
+    os.makedirs(model_dir, exist_ok=True)
     with open(os.path.join(model_dir, "commit-hash"), "w") as hashfile:
         hashfile.write(commit_hash)

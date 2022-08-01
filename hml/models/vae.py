@@ -372,7 +372,6 @@ class Model(tf.keras.models.Model):
         batch_size: int = 1,
         latent_dim: int = 256,
         num_examples_to_generate: int = 1,
-        continue_from_checkpoint: Optional[str] = None,
         save_frequency: int = 10,
         debug: bool = False,
     ) -> None:
@@ -400,36 +399,31 @@ class Model(tf.keras.models.Model):
                 discriminator if its loss is higher than this
             discriminator_loss_stop_training_threshold: Only switch to training autoencoder
                 if discriminator loss is lower than this
-            continue_from_checkpoint: Restore weights from checkpoint file if given, start
-                from scratch otherwise.
             save_frequency: How many epochs between model saves
             debug: Don't die if code not committed (for testing)
         """
         # Unless we are debugging, enforce that changes are committed
         if not debug:
-
-            # Die if there are uncommitted changes in the repo
             if modified_files_in_git_repo():
                 return
-
-            # Write commit hash to model directory
-            os.makedirs(model_dir, exist_ok=True)
             write_commit_hash_to_model_dir(model_dir)
 
         # Shape of 3x3 blocks context region
         rows, cols, channels = self.input_shape_
 
-        # Pixel Art dataset
+        # Generate a new dataset if training from scratch, use previously generated
+        # dataset if continuing from previous training
+        train_ds_save_dir = os.path.join(model_dir, "train_images")
         if self.checkpoint_path_ is None:
             train_gen = UpscaleDataset(
                 dataset_path=train_path,
                 output_shape=self.input_shape_,
                 num_examples=self.steps_per_epoch_,
-                save_dir=os.path.join(model_dir, "train_images"),
+                save_dir=train_ds_save_dir,
             )
         else:
             train_gen = ResizeDataset(
-                dataset_path=train_path, output_shape=self.input_shape_
+                dataset_path=train_ds_save_dir, output_shape=self.input_shape_
             )
 
         train_images = (
@@ -459,7 +453,7 @@ class Model(tf.keras.models.Model):
             .cache()
         )
 
-        # Make progress dir and reproductions dir for outputs
+        # Make dirs for outputs
         os.makedirs(
             generated_same_dir := os.path.join(model_dir, "generated_same"),
             exist_ok=True,
@@ -480,11 +474,9 @@ class Model(tf.keras.models.Model):
         checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
 
         # Set starting and end epoch according to whether we are continuing training
-        if continue_from_checkpoint is not None:
+        if self.checkpoint_path_ is not None:
             epoch_start = save_frequency * int(
-                continue_from_checkpoint.strip()[
-                    continue_from_checkpoint.rfind("-") + 1 :
-                ]
+                self.checkpoint_path_.strip()[self.checkpoint_path_.rfind("-") + 1 :]
             )
         else:
             epoch_start = 0
@@ -553,7 +545,8 @@ class Model(tf.keras.models.Model):
                     )
 
             if epoch % 10 == 0:
-                # Produce demo output from the same seed and form a new seed each time
+
+                # Produce demo output from a consistent seed and from a new seed
                 generated_same = self.generate_and_save_images(
                     epoch + 1, seed, generated_same_dir
                 )
