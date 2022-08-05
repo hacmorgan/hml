@@ -72,7 +72,7 @@ class Model(tf.keras.models.Model):
 
     def __init__(
         self,
-        latent_dim: int = 64,
+        latent_dim: int = 16,
         input_shape: Tuple[int, int, int] = (1152, 2048, 3),
         # input_shape: Tuple[int, int, int] = (2187, 3888, 3),  # stride 3
         conv_filters: int = 128,
