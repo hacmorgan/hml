@@ -118,7 +118,7 @@ class Model(tf.keras.models.Model):
 
         # Configure learning rate
         self.lr_ = tf.keras.optimizers.schedules.ExponentialDecay(
-            initial_learning_rate=3e-5,
+            initial_learning_rate=1e-5,
             decay_steps=self.steps_per_epoch_ * 1000,
             decay_rate=0.9,
         )
