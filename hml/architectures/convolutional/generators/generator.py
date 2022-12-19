@@ -23,11 +23,11 @@ from hml.architectures.convolutional.blocks import (
     deconv_2d_block,
     dense_block,
 )
-
-
-LATENT_SHAPE_SQUARE = (8, 8)
-LATENT_SHAPE_WIDE = (9, 16)
-LATENT_SHAPE_ULTRAWIDE = (9, 32)
+from hml.architectures.convolutional.constants import (
+    LATENT_SHAPE_SQUARE,
+    LATENT_SHAPE_WIDE,
+    LATENT_SHAPE_ULTRAWIDE,
+)
 
 
 def generator(
