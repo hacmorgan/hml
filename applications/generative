@@ -45,7 +45,7 @@ def main(args: argparse.Namespace) -> int:
 
     # Run the model's train/generate method
     if args.mode == "train":
-        model._train(
+        model.train(
             model_dir=os.path.join(args.models_dir, args.model_name),
             train_path=args.train_path,
             val_path=args.val_path,
@@ -81,7 +81,6 @@ def get_args() -> argparse.Namespace:
         "-c",
         type=str,
         help="Generate, discriminate, or continue training model from this checkpoint",
-    )
     parser.add_argument(
         "--model-class",
         "-m",
@@ -98,20 +97,20 @@ def get_args() -> argparse.Namespace:
         "train", help="Train a model", formatter_class=formatter
     )
     train_parser.add_argument(
+        "--from-config",
+        "-f",
+        type=str,
+        nargs="*",
+        default=[],
+        help="Configure model from config file, overrides command line args",
+    )
+    train_parser.add_argument(
         "--train-path",
         "-t",
         type=str,
         default="/mnt/storage/ml/data/pixel-art/train",
         help="Path to training dataset directory",
     )
-    # train_parser.add_argument(
-    #     "--constructor-kwargs",
-    #     "-k",
-    #     type=str,
-    #     nargs="*",
-    #     default=[],
-    #     help="Additional arguments to supply to model constructor",
-    # )
     train_parser.add_argument(
         "--debug",
         "-d",
@@ -149,14 +148,15 @@ def get_args() -> argparse.Namespace:
         help="Generate images using a trained model",
         formatter_class=formatter,
     )
-    # generate_parser.add_argument(
-    #     "--constructor-kwargs",
-    #     "-k",
-    #     type=str,
-    #     nargs="*",
-    #     default=[],
-    #     help="Additional arguments to supply to model constructor",
-    # )
+    )
+    generate_parser.add_argument(
+        "--from-config",
+        "-f",
+        type=str,
+        nargs="*",
+        default=[],
+        help="Configure model from config file, overrides command line args",
+    )
     generate_parser.add_argument(
         "--generator-input",
         "-g",

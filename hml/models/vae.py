@@ -364,7 +364,7 @@ class Model(tf.keras.models.Model):
         val_loss = mse(val_images, reproduced_val_images)
         return train_loss, val_loss
 
-    def _train(
+    def train(
         self,
         model_dir: str,
         train_path: str,

@@ -1,0 +1,72 @@
+#! /usr/bin/env generative generate --from-config
+
+
+# Train/generate from config
+#
+# VAE trained to generate large (e.g. wallpaper sized) images from a dataset of smaller
+# images, collaged together
+
+
+model_class: vae
+
+# Args to model class constructor
+__init__:
+
+  # Size of latent vector in the middle of the network
+  latent_dim: 16
+
+  # Training data resolution
+  input_shape: [1536, 2560, 3]
+
+  # Depth of each conv layer
+  conv_filters: 128
+
+  # Strides of convolution layers
+  strides: 2
+
+  # Restore from checkpoint (no restore if null)
+  checkpoint: null
+
+  # Number of epochs between saves
+  save_frequency: 200
+
+# Args to .train() method of model class
+train:
+
+  # Experiment (output) directory
+  model_dir: ""
+
+  # Path to training dataset
+  train_path: ""
+
+  # Path to validation dataset (only relevant for autoencoders)
+  val_path: ""
+
+  # Number of epochs to train for
+  epochs: 100
+
+  # Training batch size
+  batch_size: 1
+
+  # Number of examples to generate per epoch
+  num_examples_to_generate: 1
+
+  # Don't die if code is not committed
+  debug: false
+  
+# Args to .generate() method of model class
+generate:
+
+  # Path to grayscale image to use as input to decoder
+  decoder_input: null
+
+  # Save images instead of displaying
+  save_output: false
+
+  # Number of images to generate
+  num_generations: null
+
+  # # Optional postprocessing funciton to apply to image (as numpy array)
+  # postproc_func: Optional[Callable] = collage_vae_contrast_sharpen,
+  
+  

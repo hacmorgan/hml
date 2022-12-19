@@ -255,7 +255,7 @@ class Model:
         PIL.Image.fromarray(predictions).save(output_path)
         return predictions_raw
 
-    def _train(
+    def train(
         self,
         model_dir: str,
         train_path: str,
