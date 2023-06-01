@@ -18,6 +18,8 @@ import importlib
 import os
 import sys
 
+import yaml
+
 
 MODES_OF_OPERATION = ("train", "generate")
 
@@ -32,16 +34,25 @@ def main(args: argparse.Namespace) -> int:
     Returns:
         Exit status
     """
+    # Load config
+    if args.from_config:
+        with open(args.from_config, mode="r", encoding="utf-8") as cfg_fp:
+            config = yaml.safe_load(cfg_fp)
+        args.model_class = config["model_class"]
+
     # Instantiate the model
     model_module = importlib.import_module(f"hml.models.{args.model_class}")
-    model = model_module.Model(
-        checkpoint=args.checkpoint,
-        # **parse_kwargs(kwargs=args.constructor_kwargs),
-    )
+    if args.from_config:
+        model = model_module.Model(**config["__init__"])
+    else:
+        model = model_module.Model(checkpoint=args.checkpoint)
+
     try:
         model.custom_compile()
     except AttributeError:
-        print("Not compiling model, custom_compile() method not found", file=sys.stderr)
+        print(
+            "Not compiling model, custom_compile() method not found",
+        )
 
     # Run the model's train/generate method
     if args.mode == "train":
@@ -81,11 +92,11 @@ def get_args() -> argparse.Namespace:
         "-c",
         type=str,
         help="Generate, discriminate, or continue training model from this checkpoint",
+    )
     parser.add_argument(
         "--model-class",
         "-m",
         type=str,
-        required=True,
         help="Generative model to use. `Model` class is imported from hml.models.<model_class>",
     )
 
@@ -100,8 +111,6 @@ def get_args() -> argparse.Namespace:
         "--from-config",
         "-f",
         type=str,
-        nargs="*",
-        default=[],
         help="Configure model from config file, overrides command line args",
     )
     train_parser.add_argument(
@@ -148,13 +157,10 @@ def get_args() -> argparse.Namespace:
         help="Generate images using a trained model",
         formatter_class=formatter,
     )
-    )
     generate_parser.add_argument(
         "--from-config",
         "-f",
         type=str,
-        nargs="*",
-        default=[],
         help="Configure model from config file, overrides command line args",
     )
     generate_parser.add_argument(

@@ -2,11 +2,9 @@
 
 
 # Train/generate from config
-#
-# VAE trained to generate large (e.g. wallpaper sized) images from a dataset of smaller
-# images, collaged together
 
 
+# Model class (<class> in hml.models.<class>)
 model_class: vae
 
 # Args to model class constructor
@@ -34,13 +32,13 @@ __init__:
 train:
 
   # Experiment (output) directory
-  model_dir: ""
+  model_dir: "/mnt/storage/ml/models/CollageVAE.eboy"
 
   # Path to training dataset
-  train_path: ""
+  train_path: "/mnt/storage/ml/data/pixel-art/eboy"
 
   # Path to validation dataset (only relevant for autoencoders)
-  val_path: ""
+  val_path: "/mnt/storage/ml/data/pixel-art/val"
 
   # Number of epochs to train for
   epochs: 100
